@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 import cv2
 import numpy as np
-import yaml
 
+from rokbot.vision.controls import ROKControls
 from rokbot.vision.ui_regions import UIRegions
 
 
@@ -19,23 +18,17 @@ class ElementDetection:
 
 
 class BottomNavigationDetector:
-    """Detect/score the six bottom navigation slots.
+    """Detect the six bottom buttons around calibrated screen centers."""
 
-    The slots are defined relative to the calibrated bottom_navigation region.
-    This avoids hard-coded 3440x1440 coordinates and keeps detection resolution
-    independent. Confidence is a visual-presence score, not a semantic OCR claim.
-    """
+    NAMES = ("campaign", "items", "alliance", "commander", "mail", "menu")
 
-    def __init__(self, regions: UIRegions | None = None) -> None:
+    def __init__(
+        self,
+        regions: UIRegions | None = None,
+        controls: ROKControls | None = None,
+    ) -> None:
         self.regions = regions or UIRegions()
-        self.names = (
-            "campaign",
-            "items",
-            "alliance",
-            "commander",
-            "mail",
-            "menu",
-        )
+        self.controls = controls or ROKControls()
 
     @staticmethod
     def _score(crop: np.ndarray) -> float:
@@ -49,7 +42,6 @@ class BottomNavigationDetector:
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
         sat_score = float(np.mean(hsv[:, :, 1] > 65))
 
-        # Icons/text produce local edges; colored UI elements add saturation.
         score = edge_score * 5.0 + sat_score * 0.35
         return float(max(0.0, min(1.0, score)))
 
@@ -57,27 +49,20 @@ class BottomNavigationDetector:
         height, width = image.shape[:2]
         x1, y1, x2, y2 = self.regions.get("bottom_navigation").pixels(width, height)
 
-        region_w = x2 - x1
-        region_h = y2 - y1
+        # The navigation panel has an empty area on the left, so six equal
+        # slots are incorrect. Centers come from rok_controls.yaml.
+        button_w = max(90, round((y2 - y1) * 0.78))
+        button_h = max(90, round((y2 - y1) * 0.78))
 
-        # Six equal slots across the calibrated navigation bar.
         results: list[ElementDetection] = []
-        slot_w = region_w / 6.0
 
-        for index, name in enumerate(self.names):
-            sx1 = round(x1 + index * slot_w)
-            sx2 = round(x1 + (index + 1) * slot_w)
+        for name in self.NAMES:
+            cx, cy = self.controls.point(f"bottom.{name}", width, height)
 
-            # Ignore the extreme top/bottom edges where panel borders can
-            # otherwise inflate the visual score.
-            pad_x = max(4, round((sx2 - sx1) * 0.12))
-            pad_top = max(4, round(region_h * 0.08))
-            pad_bottom = max(4, round(region_h * 0.10))
-
-            bx1 = sx1 + pad_x
-            bx2 = sx2 - pad_x
-            by1 = y1 + pad_top
-            by2 = y2 - pad_bottom
+            bx1 = max(x1, cx - button_w // 2)
+            bx2 = min(x2, cx + button_w // 2)
+            by1 = max(y1, cy - button_h // 2)
+            by2 = min(y2, cy + button_h // 2)
 
             crop = image[by1:by2, bx1:bx2]
             confidence = self._score(crop)
@@ -85,7 +70,7 @@ class BottomNavigationDetector:
             results.append(
                 ElementDetection(
                     name=name,
-                    center=((bx1 + bx2) // 2, (by1 + by2) // 2),
+                    center=(cx, cy),
                     box=(bx1, by1, bx2, by2),
                     confidence=round(confidence, 3),
                 )
