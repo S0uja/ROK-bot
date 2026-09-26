@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from rokbot.core.adb import ADBClient
 from rokbot.core.screen import Screen
-from rokbot.vision.screen_state import detect_screen_state
+from rokbot.vision.screen_state import ScreenStateDetector
 from rokbot.vision.ui_regions import UIRegions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,7 +64,7 @@ def status():
     try:
         image = screen.capture_cv()
         h, w = image.shape[:2]
-        state = detect_screen_state(image)
+        state = ScreenStateDetector().detect(image)
         ocr = _resource_ocr(image)
         return {
             "ok": True,
@@ -75,7 +75,7 @@ def status():
             "screen": {
                 "state": state.state.value,
                 "confidence": round(state.confidence, 3),
-                "evidence": state.evidence,
+                "evidence": state.details,
             },
             "resources": ocr,
         }
