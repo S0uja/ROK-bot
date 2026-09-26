@@ -1,15 +1,14 @@
-# Semantic controls calibrated from the supplied ROK city screenshot.
+# Semantic controls calibrated from the latest 3440x1440 RoK screenshot.
 # Coordinates are normalized to the full screen (0..1).
-# These are interaction targets, not CV detections yet.
 
 controls:
   bottom:
-    campaign:   {x: 0.634, y: 0.872}
-    items:      {x: 0.708, y: 0.872}
-    alliance:   {x: 0.756, y: 0.872}
-    commander:  {x: 0.806, y: 0.872}
-    mail:       {x: 0.855, y: 0.872}
-    menu:       {x: 0.906, y: 0.872}
+    campaign:   {x: 0.629942, y: 0.871528}
+    items:      {x: 0.685465, y: 0.871528}
+    alliance:   {x: 0.741279, y: 0.871528}
+    commander:  {x: 0.795349, y: 0.871528}
+    mail:       {x: 0.852035, y: 0.871528}
+    menu:       {x: 0.903779, y: 0.871528}
 
   left:
     tasks:      {x: 0.028, y: 0.280}
