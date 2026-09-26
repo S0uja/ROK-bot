@@ -1,12 +1,43 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from pathlib import Path
 
 
+WINDOWS_ADB_CANDIDATES = (
+    Path(r"C:\LDPlayer\LDPlayer9\adb.exe"),
+    Path(r"C:\LDPlayer\LDPlayer4\adb.exe"),
+)
+
+
+def find_adb() -> str:
+    """Find the ADB binary used by the emulator.
+
+    ROK-bot prefers an explicit ROK_ADB_PATH, then LDPlayer's bundled ADB,
+    and only then falls back to ADB available on PATH.
+    """
+    configured = os.getenv("ROK_ADB_PATH")
+    if configured and Path(configured).is_file():
+        return configured
+
+    for candidate in WINDOWS_ADB_CANDIDATES:
+        if candidate.is_file():
+            return str(candidate)
+
+    path_adb = shutil.which("adb")
+    if path_adb:
+        return path_adb
+
+    raise FileNotFoundError(
+        "ADB was not found. Set ROK_ADB_PATH or install/configure an Android emulator."
+    )
+
+
 class ADBClient:
-    def __init__(self, executable: str = "adb", device: str | None = None) -> None:
-        self.executable = executable
+    def __init__(self, executable: str | None = None, device: str | None = None) -> None:
+        self.executable = executable or find_adb()
         self.device = device
 
     def _cmd(self, *args: str) -> list[str]:
@@ -30,6 +61,16 @@ class ADBClient:
                 devices.append(parts[0])
         return devices
 
+    def select_first_device(self) -> str:
+        devices = self.devices()
+        if not devices:
+            raise RuntimeError(
+                f"No Android devices found by {self.executable}. "
+                "Start the emulator and enable ADB debugging."
+            )
+        self.device = devices[0]
+        return self.device
+
     def shell(self, *args: str) -> str:
         result = subprocess.run(
             self._cmd("shell", *args),
@@ -42,7 +83,14 @@ class ADBClient:
     def tap(self, x: int, y: int) -> None:
         self.shell("input", "tap", str(x), str(y))
 
-    def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
+    def swipe(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        duration_ms: int = 300,
+    ) -> None:
         self.shell(
             "input",
             "swipe",
