@@ -9,12 +9,12 @@ regions:
     w: 0.165
     h: 0.135
 
-  # Resource counters across the top-right.
+  # Resource counters: extended farther left and slightly upward.
   resources:
-    x: 0.640
+    x: 0.600
     y: 0.00
-    w: 0.360
-    h: 0.075
+    w: 0.400
+    h: 0.070
 
   # Left hamburger / navigation control.
   left_navigation:
@@ -30,12 +30,12 @@ regions:
     w: 0.118
     h: 0.357
 
-  # Event / notification strip in the upper-right.
+  # Event / notification strip: moved down so it does not overlap resources.
   right_events:
     x: 0.671
-    y: 0.062
+    y: 0.080
     w: 0.329
-    h: 0.111
+    h: 0.105
 
   # Character / assistant panel on the right edge.
   right_character:
