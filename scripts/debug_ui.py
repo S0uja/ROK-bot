@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
+import os
+import tempfile
 
 import cv2
 
@@ -9,17 +12,54 @@ from rokbot.core.screen import Screen
 from rokbot.vision.ui_regions import UIRegions
 
 
-# BGR colors chosen to make adjacent regions easy to distinguish.
 REGION_COLORS = [
-    (0, 255, 255),    # yellow
-    (255, 0, 0),      # blue
-    (0, 165, 255),    # orange
-    (255, 0, 255),    # magenta
-    (0, 255, 0),      # green
-    (255, 255, 0),    # cyan
-    (147, 20, 255),   # pink
-    (0, 0, 255),      # red
+    (0, 255, 255),
+    (255, 0, 0),
+    (0, 165, 255),
+    (255, 0, 255),
+    (0, 255, 0),
+    (255, 255, 0),
+    (147, 20, 255),
+    (0, 0, 255),
 ]
+
+
+def save_png(image, output: Path) -> Path:
+    """Save PNG robustly on Windows, including when the previous file is open."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    ok, encoded = cv2.imencode(".png", image)
+    if not ok:
+        raise RuntimeError("OpenCV could not encode the debug image as PNG.")
+
+    data = encoded.tobytes()
+
+    # Write to a temporary file in the same directory, then atomically replace
+    # the target. If Windows has the old target locked, fall back to a timestamp.
+    temp_path: Path | None = None
+    try:
+        fd, temp_name = tempfile.mkstemp(
+            prefix="rok_ui_regions_",
+            suffix=".tmp",
+            dir=str(output.parent),
+        )
+        os.close(fd)
+        temp_path = Path(temp_name)
+        temp_path.write_bytes(data)
+        os.replace(temp_path, output)
+        return output
+    except (OSError, PermissionError):
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+        fallback = output.with_name(
+            f"{output.stem}_{datetime.now():%Y%m%d_%H%M%S}.png"
+        )
+        fallback.write_bytes(data)
+        return fallback
 
 
 def main() -> None:
@@ -71,21 +111,14 @@ def main() -> None:
         / "debug"
         / "rok_ui_regions.png"
     )
-    output.parent.mkdir(parents=True, exist_ok=True)
 
-    # Use imencode + write_bytes instead of cv2.imwrite. This is more reliable
-    # on Windows and lets us verify that the PNG bytes were actually produced.
-    ok, encoded = cv2.imencode(".png", image)
-    if not ok:
-        raise RuntimeError("OpenCV could not encode the debug image as PNG.")
-
-    output.write_bytes(encoded.tobytes())
+    saved = save_png(image, output)
 
     print(f"Device: {device}")
     print(f"Resolution: {width}x{height}")
-    print(f"Saved: True")
-    print(f"Debug overlay: {output.resolve()}")
-    print(f"File size: {output.stat().st_size:,} bytes")
+    print("Saved: True")
+    print(f"Debug overlay: {saved.resolve()}")
+    print(f"File size: {saved.stat().st_size:,} bytes")
 
     print("Regions:")
     for name, box in boxes.items():
