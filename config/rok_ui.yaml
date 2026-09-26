@@ -1,13 +1,20 @@
 # Normalized UI regions for the current Rise of Kingdoms city layout.
-# Calibrated from the latest annotated city screenshot.
 # Coordinates are ratios in the range 0..1, so the layout scales with resolution.
 
 regions:
-  top_status:
+  # Player profile / power / civilization / VIP area.
+  profile:
     x: 0.00
     y: 0.00
-    w: 1.00
-    h: 0.13
+    w: 0.165
+    h: 0.135
+
+  # Resource counters across the top-right.
+  resources:
+    x: 0.640
+    y: 0.00
+    w: 0.360
+    h: 0.075
 
   # Left hamburger / navigation control.
   left_navigation:
