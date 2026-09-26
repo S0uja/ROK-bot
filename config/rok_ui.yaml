@@ -37,19 +37,19 @@ regions:
     w: 0.132
     h: 0.444
 
-  # Main bottom action/navigation bar.
+  # Main bottom action/navigation bar, pushed down toward the screen edge.
   bottom_navigation:
     x: 0.584
-    y: 0.786
+    y: 0.835
     w: 0.416
-    h: 0.148
+    h: 0.165
 
-  # Chat message area at the lower-left.
+  # Chat message area, pushed down toward the screen edge.
   chat:
     x: 0.067
-    y: 0.801
+    y: 0.850
     w: 0.264
-    h: 0.130
+    h: 0.150
 
   # Main playable city surface.
   city_area:
