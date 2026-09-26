@@ -13,7 +13,7 @@ def main() -> None:
     print()
     print("Evidence:")
     for name, score in result.details.items():
-        print(f"  {name:20s} {score:.3f}")
+        print(f"  {name:24s} {score:.3f}")
 
 
 if __name__ == "__main__":
