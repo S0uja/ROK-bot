@@ -31,7 +31,6 @@ def main() -> None:
 
     image = screen.capture_cv()
     height, width = image.shape[:2]
-
     boxes = regions.boxes(width, height)
 
     for index, (name, (x1, y1, x2, y2)) in enumerate(boxes.items()):
@@ -39,7 +38,6 @@ def main() -> None:
 
         cv2.rectangle(image, (x1, y1), (x2, y2), color, 4)
 
-        # Filled label background for readability.
         (text_width, text_height), baseline = cv2.getTextSize(
             name,
             cv2.FONT_HERSHEY_SIMPLEX,
@@ -67,18 +65,27 @@ def main() -> None:
             cv2.LINE_AA,
         )
 
-    output = (Path(__file__).resolve().parents[1] / "screenshots" / "debug" / "rok_ui_regions.png")
+    output = (
+        Path(__file__).resolve().parents[1]
+        / "screenshots"
+        / "debug"
+        / "rok_ui_regions.png"
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    success = cv2.imwrite(str(output), image)
+    # Use imencode + write_bytes instead of cv2.imwrite. This is more reliable
+    # on Windows and lets us verify that the PNG bytes were actually produced.
+    ok, encoded = cv2.imencode(".png", image)
+    if not ok:
+        raise RuntimeError("OpenCV could not encode the debug image as PNG.")
+
+    output.write_bytes(encoded.tobytes())
 
     print(f"Device: {device}")
     print(f"Resolution: {width}x{height}")
-    print(f"Saved: {success}")
+    print(f"Saved: True")
     print(f"Debug overlay: {output.resolve()}")
-
-    if not success:
-        raise RuntimeError(f"OpenCV could not write image: {output.resolve()}")
+    print(f"File size: {output.stat().st_size:,} bytes")
 
     print("Regions:")
     for name, box in boxes.items():
