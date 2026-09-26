@@ -1,69 +1,47 @@
-# Normalized UI regions for the current Rise of Kingdoms city layout.
-# Coordinates are ratios in the range 0..1, so the layout scales with resolution.
-# Calibrated from the latest debug screenshot.
-
+# Calibrated by user at 3440x1440. Normalized coordinates scale to other resolutions.
 regions:
-  # Player profile / power / civilization / VIP area.
   profile:
-    x: 0.00
-    y: 0.00
-    w: 0.165
-    h: 0.135
-
-  # Resource counters across the upper-right edge.
+    x: 0.000000
+    y: 0.000000
+    w: 0.149419
+    h: 0.146528
   resources:
-    x: 0.560
-    y: 0.00
-    w: 0.440
-    h: 0.070
-
-  # Left hamburger / navigation control.
+    x: 0.559884
+    y: 0.000000
+    w: 0.440116
+    h: 0.070139
   left_navigation:
-    x: 0.00
-    y: 0.136
-    w: 0.059
-    h: 0.083
-
-  # Quest/task cards and their scroll area.
+    x: 0.000000
+    y: 0.146528
+    w: 0.038953
+    h: 0.084028
   left_tasks:
-    x: 0.00
-    y: 0.216
-    w: 0.118
-    h: 0.378
-
-  # Event / notification strip on the upper-right.
+    x: 0.000000
+    y: 0.230556
+    w: 0.113081
+    h: 0.357639
   right_events:
-    x: 0.584
-    y: 0.057
-    w: 0.286
-    h: 0.101
-
-  # Character / assistant panel, aligned to the right edge.
+    x: 0.630523
+    y: 0.068750
+    w: 0.369477
+    h: 0.102778
   right_character:
-    x: 0.811
-    y: 0.160
-    w: 0.189
-    h: 0.527
-
-  # Main bottom action/navigation bar.
-  # Same height as chat and flush with the bottom edge.
+    x: 0.926453
+    y: 0.170139
+    w: 0.073256
+    h: 0.595833
   bottom_navigation:
-    x: 0.545
-    y: 0.737
-    w: 0.455
-    h: 0.263
-
-  # Chat message area, flush with the bottom edge.
+    x: 0.624709
+    y: 0.870139
+    w: 0.375291
+    h: 0.129861
   chat:
-    x: 0.059
-    y: 0.737
-    w: 0.247
-    h: 0.263
-
-  # Main playable city surface, excluding the left UI,
-  # right character panel and bottom UI.
+    x: 0.065988
+    y: 0.885417
+    w: 0.239244
+    h: 0.114583
   city_area:
-    x: 0.111
-    y: 0.160
-    w: 0.700
-    h: 0.575
+    x: 0.115407
+    y: 0.172222
+    w: 0.809012
+    h: 0.693750
