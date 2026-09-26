@@ -1,0 +1,9 @@
+adb:
+  executable: adb
+  device: auto
+  screenshot_format: png
+
+bot:
+  loop_interval: 1.0
+  screenshot_dir: screenshots
+  log_dir: logs
