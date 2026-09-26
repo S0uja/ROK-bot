@@ -1,6 +1,6 @@
 # Normalized UI regions for the current Rise of Kingdoms city layout.
 # Coordinates are ratios in the range 0..1, so the layout scales with resolution.
-# Calibrated from the latest annotated screenshot.
+# Calibrated from the latest debug screenshot.
 
 regions:
   # Player profile / power / civilization / VIP area.
@@ -10,11 +10,11 @@ regions:
     w: 0.165
     h: 0.135
 
-  # Resource counters: extended farther left and slightly upward.
+  # Resource counters across the upper-right edge.
   resources:
-    x: 0.600
+    x: 0.560
     y: 0.00
-    w: 0.400
+    w: 0.440
     h: 0.070
 
   # Left hamburger / navigation control.
@@ -27,43 +27,43 @@ regions:
   # Quest/task cards and their scroll area.
   left_tasks:
     x: 0.00
-    y: 0.236
+    y: 0.216
     w: 0.118
-    h: 0.357
+    h: 0.378
 
   # Event / notification strip on the upper-right.
-  # Starts farther left and sits below the resource counters.
   right_events:
-    x: 0.626
-    y: 0.062
-    w: 0.306
-    h: 0.108
+    x: 0.584
+    y: 0.057
+    w: 0.286
+    h: 0.101
 
   # Character / assistant panel, aligned to the right edge.
   right_character:
-    x: 0.868
-    y: 0.155
-    w: 0.132
-    h: 0.580
+    x: 0.811
+    y: 0.160
+    w: 0.189
+    h: 0.527
 
   # Main bottom action/navigation bar.
   # Same height as chat and flush with the bottom edge.
   bottom_navigation:
-    x: 0.584
-    y: 0.793
-    w: 0.416
-    h: 0.207
+    x: 0.545
+    y: 0.737
+    w: 0.455
+    h: 0.263
 
-  # Chat message area, moved down and flush with the bottom edge.
+  # Chat message area, flush with the bottom edge.
   chat:
-    x: 0.063
-    y: 0.793
-    w: 0.264
-    h: 0.207
+    x: 0.059
+    y: 0.737
+    w: 0.247
+    h: 0.263
 
-  # Main playable city surface.
+  # Main playable city surface, excluding the left UI,
+  # right character panel and bottom UI.
   city_area:
-    x: 0.118
-    y: 0.173
-    w: 0.750
-    h: 0.613
+    x: 0.111
+    y: 0.160
+    w: 0.700
+    h: 0.575
