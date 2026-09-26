@@ -1,14 +1,14 @@
-# Manual click targets calibrated from the user's latest bottom-navigation screenshot.
-# Full-screen reference: 3440x1440. Coordinates are normalized.
+# Semantic controls manually calibrated from the full 2048x857 screenshot.
+# Source UI is 3440x1440; normalized coordinates keep the targets resolution-independent.
 
 controls:
   bottom:
-    campaign:   {x: 0.679492, y: 0.930556}
-    items:      {x: 0.718605, y: 0.930556}
-    alliance:   {x: 0.783256, y: 0.930556}
-    commander:  {x: 0.852326, y: 0.930556}
-    mail:       {x: 0.906977, y: 0.930556}
-    menu:       {x: 0.972674, y: 0.930556}
+    campaign:   {x: 0.683594, y: 0.929988}
+    items:      {x: 0.737305, y: 0.929988}
+    alliance:   {x: 0.794922, y: 0.929988}
+    commander:  {x: 0.854492, y: 0.929988}
+    mail:       {x: 0.910645, y: 0.929988}
+    menu:       {x: 0.968750, y: 0.929988}
 
   left:
     tasks:      {x: 0.028, y: 0.280}
