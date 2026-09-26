@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RoK Bot Dashboard</title><link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<aside class="sidebar">
+<div class="brand"><span class="logo">⚔</span><div><b>RoK Bot</b><small>Control Center</small></div></div>
+<nav>
+<button class="nav active">Обзор</button><button class="nav">Ресурсы</button><button class="nav">Экран</button><button class="nav">Задачи</button><button class="nav">Логи</button>
+</nav>
+<div class="connection"><i id="dot"></i><span id="connectionText">Проверка...</span></div>
+</aside>
+<main>
+<header><div><h1>Обзор</h1><p>Мониторинг LDPlayer и состояния Rise of Kingdoms</p></div>
+<div class="header-actions"><span id="updated">—</span><button id="refresh" class="primary">Обновить</button></div></header>
+<section class="grid stats">
+<article class="card stat"><span>Состояние игры</span><strong id="state">—</strong><small id="confidence">—</small></article>
+<article class="card stat"><span>Устройство</span><strong id="device">—</strong><small>ADB</small></article>
+<article class="card stat"><span>Разрешение</span><strong id="resolution">—</strong><small>Screen</small></article>
+<article class="card stat"><span>Приложение</span><strong>RoK</strong><small id="package">—</small></article>
+</section>
+<section class="grid resources">
+<article class="card resource"><div class="res-icon">🌾</div><div><span>Еда</span><strong id="food">—</strong></div></article>
+<article class="card resource"><div class="res-icon">🪵</div><div><span>Дерево</span><strong id="wood">—</strong></div></article>
+<article class="card resource"><div class="res-icon">🪨</div><div><span>Камень</span><strong id="stone">—</strong></div></article>
+<article class="card resource"><div class="res-icon">🪙</div><div><span>Золото</span><strong id="gold">—</strong></div></article>
+<article class="card resource"><div class="res-icon">💎</div><div><span>Самоцветы</span><strong id="gems">—</strong></div></article>
+</section>
+<section class="content-grid">
+<article class="card screen-card"><div class="card-head"><div><h2>Текущий экран</h2><span>Live screenshot</span></div><button id="openScreen">Открыть</button></div><div class="screen-wrap"><img id="screenshot" alt="RoK screenshot"></div></article>
+<article class="card"><div class="card-head"><div><h2>Диагностика</h2><span>Данные детектора</span></div></div><div id="evidence" class="evidence"></div><div class="raw"><span>OCR ресурсов</span><code id="rawOcr">—</code></div></article>
+</section>
+</main>
+<div id="modal" class="modal"><div class="modal-inner"><button id="closeModal">×</button><img id="modalImg"></div></div>
+<script src="/static/app.js"></script>
+</body></html>
