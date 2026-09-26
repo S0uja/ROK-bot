@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
+import os
+import tempfile
 
 import cv2
 
@@ -10,6 +13,41 @@ from rokbot.vision.bottom_navigation import BottomNavigationDetector
 
 
 OUTPUT = Path(__file__).resolve().parents[1] / "screenshots" / "debug" / "bottom_navigation.png"
+
+
+def save_png(image, output: Path) -> Path:
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    ok, encoded = cv2.imencode(".png", image)
+    if not ok:
+        raise RuntimeError("Could not encode debug image.")
+
+    data = encoded.tobytes()
+    temp_path: Path | None = None
+
+    try:
+        fd, temp_name = tempfile.mkstemp(
+            prefix="bottom_navigation_",
+            suffix=".tmp",
+            dir=str(output.parent),
+        )
+        os.close(fd)
+        temp_path = Path(temp_name)
+        temp_path.write_bytes(data)
+        os.replace(temp_path, output)
+        return output
+    except (OSError, PermissionError):
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+        fallback = output.with_name(
+            f"{output.stem}_{datetime.now():%Y%m%d_%H%M%S}.png"
+        )
+        fallback.write_bytes(data)
+        return fallback
 
 
 def main() -> None:
@@ -55,13 +93,9 @@ def main() -> None:
             cv2.LINE_AA,
         )
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    ok, encoded = cv2.imencode(".png", debug)
-    if not ok:
-        raise RuntimeError("Could not encode debug image.")
-
-    OUTPUT.write_bytes(encoded.tobytes())
-    print(f"Debug image: {OUTPUT.resolve()}")
+    saved = save_png(debug, OUTPUT)
+    print(f"Debug image: {saved.resolve()}")
+    print(f"File size: {saved.stat().st_size:,} bytes")
 
 
 if __name__ == "__main__":
