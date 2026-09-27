@@ -74,6 +74,9 @@ def _resource_ocr(image: np.ndarray) -> dict:
             "raw": "",
             "available": False,
             "error": str(exc),
+            "candidates": [],
+            "detected_count": 0,
+            "expected_count": len(RESOURCE_NAMES),
         }
 
     candidates = []
@@ -147,6 +150,9 @@ def _resource_ocr(image: np.ndarray) -> dict:
         "raw": " ".join(raw_parts),
         "available": True,
         "error": None,
+        "candidates": candidates,
+        "detected_count": len(values),
+        "expected_count": len(RESOURCE_NAMES),
     }
 
 
