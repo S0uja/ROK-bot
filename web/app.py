@@ -96,7 +96,6 @@ def resource_calibration_defaults():
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
     try:
         emulator_w, emulator_h = adb.display_size()
-        emulator_h = emulator_h
     except Exception:
         emulator_w, emulator_h = w, h
     return {
@@ -203,7 +202,7 @@ def screenshot():
     if image is None:
         raise HTTPException(status_code=500, detail="Cached screenshot could not be decoded")
     h, w = image.shape[:2]
-    resources = resource_detector.detect(image)
+    resources = _resources_for(image)
 
     region = resource_detector.regions.get("resources")
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
