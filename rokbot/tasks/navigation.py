@@ -10,27 +10,38 @@ from rokbot.vision.controls import ROKControls
 class EnsureCityTask:
     name = "ensure_city"
 
-    def __init__(self, timeout: float = 6.0) -> None:
+    def __init__(self, timeout: float = 6.0, city_confidence_threshold: float = 0.70) -> None:
         self.timeout = timeout
+        self.city_confidence_threshold = city_confidence_threshold
         self.controls = ROKControls()
 
     def run(self, ctx: TaskContext) -> TaskResult:
         state = ctx.refresh()
-        if state.state == ScreenState.CITY:
-            return TaskResult(True, self.name, "Already in city", state.state.value, {"confidence": state.confidence})
 
-        if state.state != ScreenState.MAP:
+        # Do not trust a weak CITY classification. The map and city share a
+        # number of HUD elements, so a low-confidence CITY result can be a
+        # false positive. Only skip the physical toggle when CITY is strong.
+        if state.state == ScreenState.CITY and state.confidence >= self.city_confidence_threshold:
             return TaskResult(
-                False,
+                True,
                 self.name,
-                "Cannot navigate: screen is not CITY or MAP",
+                "Already in city",
                 state.state.value,
                 {"confidence": state.confidence, "details": state.details},
             )
 
-        # RoK uses the same lower-left city/map toggle in both directions.
-        # Android BACK is intentionally not used here because it is a generic
-        # navigation action and may leave the game screen instead.
+        # The user-visible RoK control is a single CITY <-> MAP toggle in the
+        # lower-left corner. If the detector is uncertain, use the control
+        # rather than claiming that we are already in the city.
+        if state.state not in (ScreenState.MAP, ScreenState.CITY):
+            return TaskResult(
+                False,
+                self.name,
+                "Cannot navigate: screen is UNKNOWN",
+                state.state.value,
+                {"confidence": state.confidence, "details": state.details},
+            )
+
         image = ctx.image
         h, w = image.shape[:2]
         x, y = self.controls.point("left.city_map_toggle", w, h)
@@ -39,13 +50,13 @@ class EnsureCityTask:
         deadline = time.monotonic() + self.timeout
         while time.monotonic() < deadline:
             state = ctx.refresh()
-            if state.state == ScreenState.CITY:
+            if state.state == ScreenState.CITY and state.confidence >= 0.45:
                 return TaskResult(
                     True,
                     self.name,
                     "Returned to city",
                     state.state.value,
-                    {"confidence": state.confidence, "tap": [x, y]},
+                    {"confidence": state.confidence, "tap": [x, y], "details": state.details},
                 )
             time.sleep(0.25)
 
@@ -61,14 +72,21 @@ class EnsureCityTask:
 class OpenMapTask:
     name = "open_map"
 
-    def __init__(self, timeout: float = 6.0) -> None:
+    def __init__(self, timeout: float = 6.0, map_confidence_threshold: float = 0.70) -> None:
         self.timeout = timeout
+        self.map_confidence_threshold = map_confidence_threshold
         self.controls = ROKControls()
 
     def run(self, ctx: TaskContext) -> TaskResult:
         state = ctx.refresh()
-        if state.state == ScreenState.MAP:
-            return TaskResult(True, self.name, "Already on map", state.state.value, {"confidence": state.confidence})
+        if state.state == ScreenState.MAP and state.confidence >= self.map_confidence_threshold:
+            return TaskResult(
+                True,
+                self.name,
+                "Already on map",
+                state.state.value,
+                {"confidence": state.confidence, "details": state.details},
+            )
 
         if state.state != ScreenState.CITY:
             return TaskResult(
@@ -88,13 +106,13 @@ class OpenMapTask:
         deadline = time.monotonic() + self.timeout
         while time.monotonic() < deadline:
             state = ctx.refresh()
-            if state.state == ScreenState.MAP:
+            if state.state == ScreenState.MAP and state.confidence >= 0.45:
                 return TaskResult(
                     True,
                     self.name,
                     "Map opened",
                     state.state.value,
-                    {"confidence": state.confidence, "tap": [x, y]},
+                    {"confidence": state.confidence, "tap": [x, y], "details": state.details},
                 )
             time.sleep(0.25)
 
