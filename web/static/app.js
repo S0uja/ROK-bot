@@ -67,24 +67,25 @@ function makeDraggable(box,name,scaleX){
     startAnchor=calibrationState.anchors[name];
     startRegionY=calibrationState.region_y;
     box.classList.add("dragging");
-    const move=ev=>{
+    box.onpointermove=ev=>{
       const dx=(ev.clientX-startX)/scaleX;
-      const dy=(ev.clientY-startY)/(imgScaleY());
+      const dy=(ev.clientY-startY)/imgScaleY();
       const next=Math.max(0,Math.min(1.15,startAnchor+dx/calibrationState.region_width));
       const maxY=Math.max(0,calibrationState.height-calibrationState.region_height);
       const nextY=Math.max(0,Math.min(maxY,startRegionY+dy));
       calibrationState.anchors[name]=next;
       calibrationState.region_y=nextY;
-      renderCalibration();
-      const again=document.querySelector('.cal-box[data-name="'+name+'"]');
-      if(again){ again.setPointerCapture?.(e.pointerId); again.classList.add("dragging"); }
+
+      const slotW=calibrationState.slot_width;
+      box.style.left=((calibrationState.region_x+next*calibrationState.region_width-slotW/2)*scaleX)+"px";
+      const top=nextY*imgScaleY();
+      document.querySelectorAll(".cal-box").forEach(el=>el.style.top=top+"px");
     };
-    const up=()=>{
-      document.querySelector('.cal-box[data-name="'+name+'"]')?.classList.remove("dragging");
+    box.onpointerup=()=>{
+      box.classList.remove("dragging");
+      box.releasePointerCapture?.(e.pointerId);
       box.onpointermove=null; box.onpointerup=null;
     };
-    box.onpointermove=move;
-    box.onpointerup=up;
   };
 }
 function imgScaleY(){
