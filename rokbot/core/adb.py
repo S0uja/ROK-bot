@@ -105,6 +105,12 @@ class ADBClient:
     def tap(self, x: int, y: int) -> None:
         self.shell("input", "tap", str(x), str(y))
 
+    def dump_ui_hierarchy(self) -> str:
+        """Return Android UI Automator hierarchy for the current screen."""
+        remote = "/sdcard/window.xml"
+        self.shell("uiautomator", "dump", remote)
+        return self.shell("cat", remote)
+
     def swipe(
         self,
         x1: int,
