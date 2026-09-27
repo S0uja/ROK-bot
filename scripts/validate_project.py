@@ -29,12 +29,12 @@ def main() -> int:
     )
     failures += not check(
         "UI regions",
-        (ROOT / "config" / "rok_ui.yaml").exists() and bool(UIRegions().all()),
+        (ROOT / "config" / "rok_ui.yaml").exists() and bool(UIRegions().regions),
         "rok_ui.yaml loads",
     )
     failures += not check(
         "controls",
-        (ROOT / "config" / "rok_controls.yaml").exists() and bool(ROKControls().all()),
+        (ROOT / "config" / "rok_controls.yaml").exists() and bool(ROKControls().names()),
         "rok_controls.yaml loads",
     )
     failures += not check(
