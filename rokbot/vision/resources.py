@@ -124,7 +124,15 @@ class ResourceDetector:
             return None
         try:
             from rapidocr import RapidOCR
-            self._rapidocr = RapidOCR()
+            self._rapidocr = RapidOCR(
+                text_score=0.20,
+                min_height=10,
+                width_height_ratio=-1,
+                max_side_len=3000,
+                min_side_len=10,
+                det_thresh=0.20,
+                det_box_thresh=0.20,
+            )
             return self._rapidocr
         except Exception as exc:
             self._rapidocr_error = str(exc)
@@ -178,7 +186,7 @@ class ResourceDetector:
         if engine is None:
             return []
         try:
-            result = engine(crop, use_cls=False, text_score=0.35)
+            result = engine(crop, use_cls=False)
             txts = getattr(result, "txts", None)
             boxes = getattr(result, "boxes", None)
             scores = getattr(result, "scores", None)
@@ -194,7 +202,7 @@ class ResourceDetector:
                     confidence = float(scores[i])
                 except (TypeError, ValueError, IndexError):
                     confidence = 0.0
-                if confidence < 0.25:
+                if confidence < 0.20:
                     continue
                 box = self._rapid_box(boxes[i])
                 if box is None:
