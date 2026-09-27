@@ -55,6 +55,10 @@ function renderCalibration(){
     overlay.appendChild(box);
     makeDraggable(box,name,scaleX);
   });
+  const yInput=$("calibrationY");
+  yInput.max=Math.max(0,calibrationState.height-calibrationState.region_height);
+  yInput.value=Math.round(calibrationState.region_y);
+  $("calibrationYValue").textContent=Math.round(calibrationState.region_y)+" px";
   $("calibrationValues").innerHTML=names.map(name=>'<div><b>'+labels[name]+'</b><span id="cal-'+name+'">'+(calibrationState.values?.[name]||"—")+'</span></div>').join("");
   $("calibrationMessage").textContent="Перетащи каждую рамку горизонтально на цифру. После этого нажми «Сохранить».";
 }
@@ -108,6 +112,12 @@ $("openScreen").onclick=()=>{$("modalImg").src="/api/screenshot?t="+Date.now();$
 $("closeModal").onclick=()=>$("modal").classList.remove("show");
 $("modal").onclick=e=>{if(e.target.id==="modal")$("modal").classList.remove("show")};
 $("calibrate").onclick=openCalibration; $("closeCalibration").onclick=()=>$("calibration").classList.remove("show");
+$("calibrationY").oninput=()=>{
+  calibrationState.region_y=Number($("calibrationY").value);
+  $("calibrationYValue").textContent=Math.round(calibrationState.region_y)+" px";
+  const top=calibrationState.region_y*imgScaleY();
+  document.querySelectorAll(".cal-box").forEach(el=>el.style.top=top+"px");
+};
 $("saveCalibration").onclick=saveCalibration; $("resetCalibration").onclick=resetCalibration;
 window.addEventListener("resize",()=>{if($("calibration").classList.contains("show"))renderCalibration()});
 load();
