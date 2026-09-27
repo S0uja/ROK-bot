@@ -21,10 +21,12 @@ class Screen:
         self._capture_lock = threading.Lock()
         self._last_bytes: bytes | None = None
         self._last_capture_time = 0.0
+        self._last_capture_ms = 0.0
 
     def capture_bytes(self) -> bytes:
         """Capture one fresh frame from LDPlayer, serializing ADB screencap calls."""
         with self._capture_lock:
+            started = time.perf_counter()
             result = subprocess.run(
                 self.adb._cmd("exec-out", "screencap", "-p"),
                 capture_output=True,
@@ -32,6 +34,7 @@ class Screen:
                 timeout=15,
             )
             data = result.stdout
+            self._last_capture_ms = (time.perf_counter() - started) * 1000.0
             if not data:
                 raise RuntimeError("ADB screencap returned empty output")
             self._last_bytes = data
