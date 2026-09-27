@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from rokbot.core.adb import ADBClient
+from rokbot.core.config import load_settings
 from rokbot.core.screen import Screen
 from rokbot.vision.detector import ScreenDetector
 
@@ -19,6 +20,7 @@ def main() -> None:
     print(f"Device: {device}")
     print("Monitoring screen. Press Ctrl+C to stop.\n")
 
+    settings = load_settings()
     try:
         while True:
             width, height = screen.size()
@@ -31,8 +33,8 @@ def main() -> None:
                 f"resolution={width}x{height}"
             )
 
-            screen.save(Path("screenshots") / "current.png")
-            time.sleep(1.0)
+            screen.save(settings.screenshot_dir / "current.png")
+            time.sleep(settings.loop_interval)
     except KeyboardInterrupt:
         print("\nStopped.")
 
