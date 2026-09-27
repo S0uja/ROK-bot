@@ -28,6 +28,31 @@ regions = UIRegions()
 
 RESOURCE_NAMES = ["food", "wood", "stone", "gold", "gems"]
 
+def _configure_tesseract() -> str | None:
+    """Find Tesseract on Windows without requiring it to be on PATH."""
+    candidates = [
+        Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
+        Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
+        Path.home() / "AppData" / "Local" / "Programs" / "Tesseract-OCR" / "tesseract.exe",
+    ]
+    for path in candidates:
+        if path.exists():
+            pytesseract.pytesseract.tesseract_cmd = str(path)
+            return str(path)
+    try:
+        import shutil
+        found = shutil.which("tesseract")
+        if found:
+            pytesseract.pytesseract.tesseract_cmd = found
+            return found
+    except Exception:
+        pass
+    return None
+
+
+TESSERACT_PATH = _configure_tesseract()
+
+
 
 def _device():
     try:
