@@ -67,11 +67,11 @@ def _resource_ocr(image: np.ndarray) -> dict:
 
     # Centers measured from the actual 3440x1440 RoK layout.
     anchors = {
-        "food": 0.688,
-        "wood": 0.765,
-        "stone": 0.838,
-        "gold": 0.902,
-        "gems": 0.964,
+        "food": 0.660,
+        "wood": 0.736,
+        "stone": 0.831,
+        "gold": 0.894,
+        "gems": 0.962,
     }
 
     values = {}
@@ -81,8 +81,8 @@ def _resource_ocr(image: np.ndarray) -> dict:
     try:
         for name, center in anchors.items():
             # Keep the crop tight so neighbouring counters cannot steal a value.
-            x1 = max(0, round(width * (center - 0.032)))
-            x2 = min(width, round(width * (center + 0.032)))
+            x1 = max(0, round(width * (center - 0.040)))
+            x2 = min(width, round(width * (center + 0.040)))
             y1 = 0
             y2 = round(height * 0.085)
             crop = image[y1:y2, x1:x2]
