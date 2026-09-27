@@ -121,6 +121,7 @@ def save_resource_calibration(payload: dict):
     resource_detector._stable_values.clear()
     resource_detector._pending_values.clear()
     resource_detector._pending_counts.clear()
+    resource_detector._stable_boxes.clear()
     return {"ok": True, "anchors": clean, "region_y_norm": region_y_norm}
 
 @app.get("/api/status")
