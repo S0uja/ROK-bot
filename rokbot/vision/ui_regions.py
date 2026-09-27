@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
 from rokbot.core.config import ROOT, CONFIG_DIR
@@ -11,6 +11,7 @@ class Region:
     y: float
     w: float
     h: float
+    anchors: dict[str, float] = field(default_factory=dict)
     def pixels(self,width:int,height:int)->tuple[int,int,int,int]:
         return (round(self.x*width),round(self.y*height),round((self.x+self.w)*width),round((self.y+self.h)*height))
 
@@ -24,3 +25,6 @@ class UIRegions:
     def get(self,name:str)->Region: return self.regions[name]
     def boxes(self,width:int,height:int)->dict[str,tuple[int,int,int,int]]:
         return {name:r.pixels(width,height) for name,r in self.regions.items()}
+
+    def anchors(self,name:str)->dict[str,float]:
+        return dict(self.get(name).anchors)
