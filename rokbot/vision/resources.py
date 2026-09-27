@@ -198,7 +198,7 @@ class ResourceDetector:
                 result = self._read_anchor(crop, anchor)
                 if result is not None:
                     detected[name] = result["value"]
-                    boxes[name] = result["box"]
+                    boxes[name] = tuple(round(v / scale) for v in result["box"])
 
             # OCR can fluctuate from frame to frame. Require two consecutive
             # observations before accepting a changed value, while retaining
