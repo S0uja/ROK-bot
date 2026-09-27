@@ -67,7 +67,9 @@ def _resources_for(image):
     capture_time = getattr(screen, "_last_capture_time", 0.0)
     if _resource_cache is not None and capture_time == _resource_cache_capture_time:
         return _resource_cache
+    started = time.perf_counter()
     result = resource_detector.detect(image)
+    resource_detector._last_detect_ms = (time.perf_counter() - started) * 1000.0
     _resource_cache = result
     _resource_cache_capture_time = capture_time
     return result
@@ -182,6 +184,18 @@ def save_resource_calibration(payload: dict):
     _resource_cache = None
     _resource_cache_capture_time = 0.0
     return {"ok": True, "anchors": clean, "region_y_norm": region_y_norm}
+
+@app.get("/api/perf")
+def perf():
+    return {
+        "ok": True,
+        "screenshot_ms": round(float(getattr(screen, "_last_capture_ms", 0.0)), 1),
+        "png_decode_ms": round(float(getattr(screen, "_last_png_decode_ms", 0.0)), 1),
+        "rapidocr_ms": round(float(getattr(resource_detector, "_last_rapidocr_ms", 0.0)), 1),
+        "tesseract_ms": round(float(getattr(resource_detector, "_last_tesseract_ms", 0.0)), 1),
+        "resource_cache_ms": round(float(getattr(resource_detector, "_last_detect_ms", 0.0)), 1),
+        "timestamp": time.time(),
+    }
 
 @app.get("/api/resources")
 def resources():
