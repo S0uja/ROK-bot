@@ -28,3 +28,4 @@ controls:
     level_minus:{x: 0.284319, y: 0.541860}
     level_plus: {x: 0.436737, y: 0.541860}
     search:     {x: 0.361505, y: 0.630233}
+    collect:    {x: 0.618467, y: 0.624855}
