@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import re
 import shutil
 from pathlib import Path
+import time
 import cv2
 import numpy as np
 import pytesseract
@@ -183,6 +184,7 @@ class ResourceDetector:
             return None
 
     def _scan_rapidocr(self, crop: np.ndarray) -> list[dict]:
+        started = time.perf_counter()
         engine = self._get_rapidocr()
         if engine is None:
             return []
@@ -213,8 +215,10 @@ class ResourceDetector:
                     "confidence": round(confidence * 100.0, 1),
                     "box": box,
                 })
+            self._last_rapidocr_ms = (time.perf_counter() - started) * 1000.0
             return self._merge_ocr_tokens(candidates)
         except Exception as exc:
+            self._last_rapidocr_ms = (time.perf_counter() - started) * 1000.0
             self._rapidocr_error = str(exc)
             return []
 
@@ -254,14 +258,18 @@ class ResourceDetector:
         return assigned
 
     def _run_ocr(self, variant: np.ndarray, psm: int):
+        started = time.perf_counter()
         try:
-            return pytesseract.image_to_data(
+            result = pytesseract.image_to_data(
                 variant,
                 config=f"--oem 3 --psm {psm} -c tessedit_char_whitelist=0123456789.,KMBT",
                 output_type=pytesseract.Output.DICT,
                 timeout=1.0,
             )
+            self._last_tesseract_ms += (time.perf_counter() - started) * 1000.0
+            return result
         except RuntimeError:
+            self._last_tesseract_ms += (time.perf_counter() - started) * 1000.0
             return None
 
     def _startup_scan(self, crop: np.ndarray) -> tuple[dict[str, dict], list[dict]]:
@@ -387,6 +395,8 @@ class ResourceDetector:
         return best
 
     def detect(self, image: np.ndarray) -> ResourceDetection:
+        detect_started = time.perf_counter()
+        self._last_tesseract_ms = 0.0
         try:
             h, w = image.shape[:2]
             x1, y1, x2, y2 = self.regions.get("resources").pixels(w, h)
@@ -486,6 +496,7 @@ class ResourceDetector:
             if self._rapidocr is None and self._rapidocr_error:
                 error = f"RapidOCR unavailable: {self._rapidocr_error}"
 
+            self._last_detect_ms = (time.perf_counter() - detect_started) * 1000.0
             return ResourceDetection(
                 values,
                 " ".join(x["value"] for x in candidates),
