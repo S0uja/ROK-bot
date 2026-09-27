@@ -81,6 +81,18 @@ class ADBClient:
         self.device = devices[0]
         return self.device
 
+    def display_size(self) -> tuple[int, int]:
+        """Return Android/LDPlayer's configured display size via wm size."""
+        output = self.shell("wm", "size")
+        # Physical size: 3440x1440
+        import re
+        match = re.search(r"(?:Physical size|Override size):\s*(\d+)x(\d+)", output)
+        if not match:
+            match = re.search(r"(\d+)x(\d+)", output)
+        if not match:
+            raise RuntimeError(f"Unable to parse emulator display size: {output!r}")
+        return int(match.group(1)), int(match.group(2))
+
     def shell(self, *args: str) -> str:
         result = subprocess.run(
             self._cmd("shell", *args),
