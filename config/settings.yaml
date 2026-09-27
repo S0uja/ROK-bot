@@ -1,5 +1,5 @@
 adb:
-  executable: adb
+  executable: auto
   device: auto
   screenshot_format: png
 
