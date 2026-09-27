@@ -33,6 +33,11 @@ async function openCalibration(){
 }
 function renderCalibration(){
   const img=$("calibrationImage"), overlay=$("calibrationOverlay"), canvas=$("calibrationCanvas");
+  if(!img || !overlay || !canvas || !calibrationState) return;
+  if(!img.complete || !img.naturalWidth || !img.naturalHeight){
+    img.onload=()=>renderCalibration();
+    return;
+  }
   overlay.innerHTML="";
   const ir=img.getBoundingClientRect(), cr=canvas.getBoundingClientRect();
   overlay.style.left=(ir.left-cr.left)+"px";
@@ -134,7 +139,8 @@ async function saveCalibration(){
 async function resetCalibration(){
   const r=await fetch("/api/resources/calibration/defaults");
   calibrationState=await r.json();
-  renderCalibration();
+  $("calibrationImage").src="/api/screenshot/raw?t="+Date.now();
+  $("calibrationImage").onload=renderCalibration;
 }
 $("refresh").onclick=load; setInterval(load,3000);
 $("openScreen").onclick=()=>{$("modalImg").src="/api/screenshot?t="+Date.now();$("modal").classList.add("show")};
