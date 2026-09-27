@@ -115,11 +115,27 @@ class ScreenStateDetector:
         character = self._crop(image, boxes["right_character"])
         bottom = self._crop(image, boxes["bottom_navigation"])
         city = self._crop(image, boxes["city_area"])
+        tasks = self._crop(image, boxes["left_tasks"])
+        resources = self._crop(image, boxes["resources"])
 
         character_score = min(1.0, self._color_score(character) * 2.0)
         bottom_score = min(1.0, self._edge_score(bottom) * 5.0)
         city_green = min(1.0, self._green_score(city) * 1.5)
         city_edges = min(1.0, self._edge_score(city) * 6.0)
+        task_edges = min(1.0, self._edge_score(tasks) * 5.0)
+        resource_edges = min(1.0, self._edge_score(resources) * 8.0)
+        resource_color = min(1.0, self._color_score(resources) * 1.8)
+
+        # The calibrated city HUD is a strong local signal. It is cheap and
+        # does not require OCR: the resource strip contains five colored,
+        # separated counters in CITY and remains stable while the scene moves.
+        city_hud = min(
+            1.0,
+            0.45 * resource_edges
+            + 0.30 * resource_color
+            + 0.15 * task_edges
+            + 0.10 * character_score,
+        )
 
         map_ocr = self._ocr_map_coordinates(image)
 
@@ -135,18 +151,29 @@ class ScreenStateDetector:
         )
 
         city_confidence = (
-            0.40 * character_score
-            + 0.30 * bottom_score
-            + 0.20 * city_edges
+            0.35 * character_score
+            + 0.25 * bottom_score
+            + 0.15 * city_edges
+            + 0.15 * city_hud
             + 0.10 * (1.0 - map_ocr)
+        )
+
+        # Do not let a weak visual score block navigation when the map
+        # coordinate strip is absent and the calibrated city HUD is present.
+        # This is intentionally below the MAP threshold: MAP still requires
+        # strong coordinate evidence or a clearly map-like visual.
+        strong_city_layout = (
+            map_ocr == 0.0
+            and character_score >= 0.45
+            and city_hud >= 0.20
         )
 
         if map_confidence >= 0.75 and map_confidence > city_confidence:
             state = ScreenState.MAP
             confidence = map_confidence
-        elif city_confidence >= 0.55:
+        elif strong_city_layout or city_confidence >= 0.45:
             state = ScreenState.CITY
-            confidence = city_confidence
+            confidence = max(city_confidence, 0.45)
         else:
             state = ScreenState.UNKNOWN
             confidence = max(map_confidence, city_confidence)
@@ -161,6 +188,10 @@ class ScreenStateDetector:
                 "bottom_navigation": round(bottom_score, 3),
                 "city_edges": round(city_edges, 3),
                 "city_green": round(city_green, 3),
+                "task_edges": round(task_edges, 3),
+                "resource_edges": round(resource_edges, 3),
+                "resource_color": round(resource_color, 3),
+                "city_hud": round(city_hud, 3),
             },
         )
 
