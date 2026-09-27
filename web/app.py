@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import yaml
 
@@ -250,15 +250,28 @@ def run_bot_task(task_name: str, payload: dict | None = None):
     task = tasks.get(task_name)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Unknown task: {task_name}")
-    result = bot_controller.run(task)
-    return {
-        "ok": result.ok,
-        "task": result.task,
-        "message": result.message,
-        "state": result.state,
-        "data": result.data,
-        "controller": bot_controller.status(),
-    }
+    try:
+        result = bot_controller.run(task)
+        return {
+            "ok": result.ok,
+            "task": result.task,
+            "message": result.message,
+            "state": result.state,
+            "data": result.data,
+            "controller": bot_controller.status(),
+        }
+    except Exception as exc:
+        # Always return JSON so the dashboard can show the actual backend
+        # error instead of failing with "Unexpected token ... is not valid JSON".
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "task": task_name,
+                "message": str(exc),
+                "error": type(exc).__name__,
+            },
+        )
 
 
 @app.get("/api/status")
