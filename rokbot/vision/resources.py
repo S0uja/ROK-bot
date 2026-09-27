@@ -78,21 +78,55 @@ class ResourceDetector:
             scale=3
             crop=cv2.resize(crop,None,fx=scale,fy=scale,interpolation=cv2.INTER_CUBIC)
             gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
-            data=pytesseract.image_to_data(gray,config="--psm 11 -c tessedit_char_whitelist=0123456789.,KMBT",output_type=pytesseract.Output.DICT)
+            variants = [
+                ("gray", gray, "--psm 11"),
+                ("line", gray, "--psm 7"),
+                ("threshold", cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)[1], "--psm 7"),
+                ("adaptive", cv2.adaptiveThreshold(
+                    gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    cv2.THRESH_BINARY, 31, 8
+                ), "--psm 7"),
+            ]
+
             found=[]
-            for i,raw in enumerate(data.get("text",[])):
-                token=self._token(raw)
-                if not token: continue
-                conf=float(data["conf"][i])
-                cx=(data["left"][i]+data["width"][i]/2)/scale
-                cy=(data["top"][i]+data["height"][i]/2)/scale
-                found.append({
-                    "value": token,
-                    "x": round(cx,1),
-                    "y": round(cy,1),
-                    "confidence": round(conf,1),
-                })
-            found.sort(key=lambda x:x["x"])
+            for _, variant, psm in variants:
+                data=pytesseract.image_to_data(
+                    variant,
+                    config=f"{psm} -c tessedit_char_whitelist=0123456789.,KMBT",
+                    output_type=pytesseract.Output.DICT,
+                )
+                for i,raw in enumerate(data.get("text",[])):
+                    token=self._token(raw)
+                    if not token: continue
+                    try:
+                        conf=float(data["conf"][i])
+                    except (TypeError, ValueError):
+                        conf=-1.0
+                    cx=(data["left"][i]+data["width"][i]/2)/scale
+                    cy=(data["top"][i]+data["height"][i]/2)/scale
+                    found.append({
+                        "value": token,
+                        "x": round(cx,1),
+                        "y": round(cy,1),
+                        "confidence": round(conf,1),
+                    })
+
+            # Keep the strongest OCR result for approximately the same position.
+            deduped=[]
+            for item in sorted(found, key=lambda x:(x["x"], -x["confidence"])):
+                duplicate=False
+                for existing in deduped:
+                    if (
+                        abs(item["x"] - existing["x"]) <= 18
+                        and abs(item["y"] - existing["y"]) <= 12
+                    ):
+                        duplicate=True
+                        if item["confidence"] > existing["confidence"]:
+                            existing.update(item)
+                        break
+                if not duplicate:
+                    deduped.append(item)
+            found=sorted(deduped, key=lambda x:x["x"])
 
             # RoK may render large values with a visual space, e.g. "88 058"
             # or "4 329". Merge nearby numeric OCR fragments on the same row.
