@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import re
+import hashlib
 import shutil
 from pathlib import Path
 import time
@@ -32,6 +33,7 @@ class ResourceDetector:
         self._pending_counts: dict[str, int] = {}
         self._stable_boxes: dict[str, tuple[int,int,int,int]] = {}
         self._startup_scan_done = False
+        self._last_resource_signature: bytes | None = None
 
     @staticmethod
     def _configure_tesseract():
@@ -467,6 +469,38 @@ class ResourceDetector:
             h, w = image.shape[:2]
             x1, y1, x2, y2 = self.regions.get("resources").pixels(w, h)
             crop = image[y1:y2, x1:x2]
+
+            # The resource HUD is mostly static. Hash a tiny normalized
+            # grayscale version so OCR is only executed when the HUD itself
+            # changes. This keeps the normal polling loop cheap while still
+            # detecting a resource counter as soon as its pixels change.
+            signature_image = cv2.resize(
+                cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY),
+                (96, 8),
+                interpolation=cv2.INTER_AREA,
+            )
+            resource_signature = hashlib.blake2b(
+                signature_image.tobytes(),
+                digest_size=8,
+            ).digest()
+
+            if (
+                self._last_resource_signature == resource_signature
+                and self._stable_values
+            ):
+                self._last_rapidocr_ms = 0.0
+                self._last_tesseract_ms = 0.0
+                self._last_detect_ms = (time.perf_counter() - detect_started) * 1000.0
+                return ResourceDetection(
+                    dict(self._stable_values),
+                    " ".join(self._stable_values.get(name, "") for name in RESOURCE_NAMES),
+                    [],
+                    True,
+                    None,
+                    self._stable_boxes,
+                )
+
+            self._last_resource_signature = resource_signature
 
             detected: dict[str, str] = {}
             boxes: dict[str, tuple[int, int, int, int]] = {}
