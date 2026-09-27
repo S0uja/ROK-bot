@@ -14,3 +14,5 @@ main{margin-left:230px;width:calc(100% - 230px);padding:30px 34px 50px;max-width
 .cal-found{position:absolute;border:3px solid #39e879;background:rgba(57,232,121,.12);pointer-events:none;z-index:4;color:#fff;text-shadow:0 1px 3px #000}
 .cal-found span{position:absolute;left:2px;bottom:2px;background:rgba(0,0,0,.7);padding:2px 4px;font-size:10px;white-space:nowrap}
 .cal-box{z-index:5}
+
+.perf-diag{margin-top:14px;padding:12px 14px;border-top:1px solid rgba(255,255,255,.08);font-size:13px}.perf-diag div{display:flex;justify-content:space-between;gap:20px;padding:4px 0}.perf-diag span{opacity:.7}.perf-diag b{font-variant-numeric:tabular-nums}
