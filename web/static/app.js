@@ -8,6 +8,8 @@ async function load(){
   if(loading) return;
   loading=true;
   try{
+    // Start screenshot immediately; do not wait for OCR/status processing.
+    $("screenshot").src="/api/screenshot?t="+Date.now();
     const r=await fetch("/api/status",{cache:"no-store"}); const d=await r.json();
     if(!d.ok) throw new Error(d.error||"unknown");
     $("dot").parentElement.classList.add("ok"); $("connectionText").textContent="Подключено";
@@ -18,11 +20,9 @@ async function load(){
     $("updated").textContent="Обновлено "+new Date(d.timestamp*1000).toLocaleTimeString();
     const ev=d.screen?.evidence||{};
     $("evidence").innerHTML=Object.entries(ev).map(([k,v])=>'<div class="ev"><span>'+k+'</span><b>'+Number(v).toFixed(3)+'</b></div><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(v)*100))+'%"></i></div>').join("");
-    $("screenshot").src="/api/screenshot?t="+Date.now();
   }catch(e){
     $("connectionText").textContent="Ошибка данных"; $("dot").parentElement.classList.remove("ok");
     $("state").textContent="ERROR"; $("confidence").textContent=e.message;
-    $("screenshot").src="/api/screenshot?t="+Date.now();
   }finally{
     loading=false;
   }
