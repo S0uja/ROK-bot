@@ -97,7 +97,7 @@ def resource_calibration_defaults():
         "region_width": rx2 - rx1, "region_height": ry2 - ry1,
         "slot_width": max(70, round((rx2 - rx1) * 0.085)) * 2,
         "anchors": {"food":0.260,"wood":0.405,"stone":0.570,"gold":0.725,"gems":0.870},
-        "values": resource_detector.detect(image).values,
+        "values": _resources_for(image).values,
     }
 
 @app.post("/api/resources/calibration")
@@ -136,6 +136,9 @@ def save_resource_calibration(payload: dict):
     resource_detector._pending_values.clear()
     resource_detector._pending_counts.clear()
     resource_detector._stable_boxes.clear()
+    global _resource_cache, _resource_cache_capture_time
+    _resource_cache = None
+    _resource_cache_capture_time = 0.0
     return {"ok": True, "anchors": clean, "region_y_norm": region_y_norm}
 
 @app.get("/api/status")
