@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from rokbot.tasks.base import TaskContext, TaskResult
 from rokbot.tasks.navigation import EnsureMapTask
@@ -36,7 +37,7 @@ class SearchResourceTask:
         return x, y
 
     def _debug_frame(self, ctx: TaskContext, filename: str) -> None:
-        path = ctx.screen.save(ctx.screen.adb.__class__.__module__ and __import__("pathlib").Path("logs") / filename)
+        path = ctx.screen.save(Path("logs") / filename)
         print(f"[RESOURCE] screenshot: {path}")
 
 
