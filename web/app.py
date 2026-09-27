@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import time
+import threading
 from pathlib import Path
 
 import cv2
@@ -31,6 +32,35 @@ resource_detector = ResourceDetector()
 
 _resource_cache: object | None = None
 _resource_cache_capture_time = 0.0
+_resource_worker_started = False
+_resource_worker_lock = threading.Lock()
+
+def _resource_worker():
+    """Keep resource OCR fresh independently of dashboard HTTP requests."""
+    global _resource_cache, _resource_cache_capture_time
+    while True:
+        started = time.monotonic()
+        try:
+            image = screen.capture_cv()
+            _resources_for(image)
+        except Exception:
+            pass
+        elapsed = time.monotonic() - started
+        time.sleep(max(0.15, 0.75 - elapsed))
+
+def _start_resource_worker():
+    global _resource_worker_started
+    with _resource_worker_lock:
+        if _resource_worker_started:
+            return
+        _resource_worker_started = True
+        threading.Thread(
+            target=_resource_worker,
+            name="rok-resource-ocr",
+            daemon=True,
+        ).start()
+
+_resource_cache_capture_time = 0.0
 
 def _resources_for(image):
     global _resource_cache, _resource_cache_capture_time
@@ -55,6 +85,8 @@ def _device():
         return adb.select_first_device()
     except Exception:
         return None
+
+_start_resource_worker()
 
 @app.get("/")
 def index():
