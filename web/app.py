@@ -46,6 +46,7 @@ def resource_calibration():
     return {
         "width": w, "height": h,
         "region_x": rx1, "region_y": ry1,
+        "region_y_norm": region.y,
         "region_width": rx2 - rx1, "region_height": ry2 - ry1,
         "slot_width": max(70, round((rx2 - rx1) * 0.085)) * 2,
         "anchors": resource_detector.regions.anchors("resources"),
@@ -60,6 +61,8 @@ def resource_calibration_defaults():
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
     return {
         "width": w, "height": h,
+        "region_x": rx1, "region_y": ry1,
+        "region_y_norm": region.y,
         "region_width": rx2 - rx1, "region_height": ry2 - ry1,
         "slot_width": max(70, round((rx2 - rx1) * 0.085)) * 2,
         "anchors": {"food":0.260,"wood":0.405,"stone":0.570,"gold":0.725,"gems":0.870},
@@ -69,6 +72,7 @@ def resource_calibration_defaults():
 @app.post("/api/resources/calibration")
 def save_resource_calibration(payload: dict):
     anchors = payload.get("anchors")
+    region_y_norm = payload.get("region_y_norm", resource_detector.regions.get("resources").y)
     allowed = {"food","wood","stone","gold","gems"}
     if not isinstance(anchors, dict) or set(anchors) != allowed:
         raise HTTPException(status_code=400, detail="invalid anchors")
@@ -82,16 +86,25 @@ def save_resource_calibration(payload: dict):
             raise HTTPException(status_code=400, detail=f"anchor out of range: {name}")
         clean[name] = round(value, 6)
 
+    try:
+        region_y_norm = float(region_y_norm)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="invalid region_y_norm")
+    if not 0 <= region_y_norm <= 0.85:
+        raise HTTPException(status_code=400, detail="region_y_norm out of range")
+
     config_path = ROOT / "config" / "rok_ui.yaml"
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    data.setdefault("regions", {}).setdefault("resources", {})["anchors"] = clean
+    resources_config = data.setdefault("regions", {}).setdefault("resources", {})
+    resources_config["anchors"] = clean
+    resources_config["y"] = round(region_y_norm, 6)
     config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
     resource_detector.regions = __import__("rokbot.vision.ui_regions", fromlist=["UIRegions"]).UIRegions()
     resource_detector._stable_values.clear()
     resource_detector._pending_values.clear()
     resource_detector._pending_counts.clear()
-    return {"ok": True, "anchors": clean}
+    return {"ok": True, "anchors": clean, "region_y_norm": region_y_norm}
 
 @app.get("/api/status")
 def status():
