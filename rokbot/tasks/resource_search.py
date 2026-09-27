@@ -64,12 +64,13 @@ class SearchResourceTask:
         for _ in range(self.level - 1):
             taps["level_plus"] = self._tap(ctx, "resource_search.level_plus", pause=0.08)
 
-        taps["search"] = self._tap(ctx, "resource_search.search", pause=0.5)
+        taps["search"] = self._tap(ctx, "resource_search.search", pause=0.8)
+        taps["collect"] = self._tap(ctx, "resource_search.collect", pause=0.8)
 
         return TaskResult(
             True,
             self.name,
-            f"Search started: {resource} level {self.level}",
+            f"Resource found and collection started: {resource} level {self.level}",
             "MAP",
             {"resource": resource, "level": self.level, "taps": taps},
         )
