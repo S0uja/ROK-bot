@@ -171,7 +171,10 @@ def _png_response(data: bytes) -> Response:
 
 @app.get("/api/screenshot")
 def screenshot():
-    image = screen.capture_cv()
+    raw = screen.cached_bytes(max_age=5.0)
+    image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise HTTPException(status_code=500, detail="Cached screenshot could not be decoded")
     h, w = image.shape[:2]
     resources = resource_detector.detect(image)
 
