@@ -22,6 +22,7 @@ class Screen:
         self._last_bytes: bytes | None = None
         self._last_capture_time = 0.0
         self._last_capture_ms = 0.0
+        self._last_png_decode_ms = 0.0
 
     def capture_bytes(self) -> bytes:
         """Capture one fresh frame from LDPlayer, serializing ADB screencap calls."""
@@ -52,8 +53,11 @@ class Screen:
 
     def capture_cv(self) -> np.ndarray:
         """Return the current screen as an OpenCV BGR image."""
+        started = time.perf_counter()
         rgb = np.asarray(self.capture())
-        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        image = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        self._last_png_decode_ms = (time.perf_counter() - started) * 1000.0
+        return image
 
     def save(self, output: str | Path) -> Path:
         output = Path(output)
