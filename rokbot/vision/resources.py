@@ -17,6 +17,7 @@ class ResourceDetection:
     candidates: list[dict]
     available: bool
     error: str|None
+    boxes: dict[str, tuple[int,int,int,int]] = None
 
 class ResourceDetector:
     """Detect resources only inside the calibrated resources UI region."""
@@ -74,7 +75,7 @@ class ResourceDetector:
         return values
 
     def _read_anchor(self, crop: np.ndarray, anchor: float, scale: int = 4) -> dict | None:
-        """OCR one resource slot around its calibrated horizontal anchor."""
+        """OCR one resource slot and return its text box in crop coordinates."""
         h, w = crop.shape[:2]
         center = int(anchor * w)
         half = max(70, int(w * 0.085))
@@ -100,7 +101,16 @@ class ResourceDetector:
                     conf = float(data["conf"][i])
                 except (TypeError, ValueError):
                     conf = -1.0
-                candidate = {"value": token, "confidence": round(conf, 1)}
+                candidate = {
+                    "value": token,
+                    "confidence": round(conf, 1),
+                    "box": (
+                        round(x1 + data["left"][i] / scale),
+                        round(data["top"][i] / scale),
+                        round(x1 + (data["left"][i] + data["width"][i]) / scale),
+                        round((data["top"][i] + data["height"][i]) / scale),
+                    ),
+                }
                 if best is None or candidate["confidence"] > best["confidence"]:
                     best = candidate
         return best
@@ -179,6 +189,7 @@ class ResourceDetector:
                 merged.append(item)
             found=merged
             detected = {}
+            boxes = {}
             anchors = self.regions.anchors("resources")
             for name in RESOURCE_NAMES:
                 anchor = anchors.get(name)
@@ -187,6 +198,7 @@ class ResourceDetector:
                 result = self._read_anchor(crop, anchor)
                 if result is not None:
                     detected[name] = result["value"]
+                    boxes[name] = result["box"]
 
             # OCR can fluctuate from frame to frame. Require two consecutive
             # observations before accepting a changed value, while retaining
@@ -214,6 +226,7 @@ class ResourceDetector:
                 found,
                 True,
                 None,
+                boxes,
             )
         except Exception as exc:
             return ResourceDetection({}, "", [], False, str(exc))
