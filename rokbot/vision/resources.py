@@ -23,6 +23,8 @@ class ResourceDetector:
     """Detect resources from the calibrated HUD."""
     def __init__(self,regions:UIRegions|None=None)->None:
         self.regions=regions or UIRegions()
+        self._rapidocr = None
+        self._rapidocr_error: str | None = None
         self._configure_tesseract()
         self._stable_values: dict[str, str] = {}
         self._pending_values: dict[str, str] = {}
@@ -113,6 +115,107 @@ class ResourceDetector:
                 merged.append(item)
 
         return merged
+
+
+    def _get_rapidocr(self):
+        if self._rapidocr is not None:
+            return self._rapidocr
+        if self._rapidocr_error is not None:
+            return None
+        try:
+            from rapidocr import RapidOCR
+            self._rapidocr = RapidOCR()
+            return self._rapidocr
+        except Exception as exc:
+            self._rapidocr_error = str(exc)
+            return None
+
+    @staticmethod
+    def _merge_ocr_tokens(tokens: list[dict]) -> list[dict]:
+        tokens.sort(key=lambda item: (item["box"][1], item["box"][0]))
+        merged: list[dict] = []
+        for item in tokens:
+            if not merged:
+                merged.append(item)
+                continue
+            prev = merged[-1]
+            px1, py1, px2, py2 = prev["box"]
+            x1i, y1i, x2i, y2i = item["box"]
+            ph = max(1, py2 - py1)
+            ih = max(1, y2i - y1i)
+            same_line = abs(((py1 + py2) / 2) - ((y1i + y2i) / 2)) <= max(ph, ih) * 0.55
+            gap = x1i - px2
+            close = gap <= max(14.0, min(ph, ih) * 1.2)
+            pd = re.sub(r"[^0-9]", "", prev["value"])
+            idg = re.sub(r"[^0-9]", "", item["value"])
+            if same_line and close and pd and idg and len(pd) <= 3 and len(idg) <= 3 and len(pd) + len(idg) >= 4:
+                merged[-1] = {
+                    "value": prev["value"] + item["value"],
+                    "confidence": round(min(prev["confidence"], item["confidence"]), 1),
+                    "box": (min(px1, x1i), min(py1, y1i), max(px2, x2i), max(py2, y2i)),
+                }
+            else:
+                merged.append(item)
+        return merged
+
+    @staticmethod
+    def _rapid_box(box) -> tuple[int,int,int,int] | None:
+        try:
+            points = np.asarray(box, dtype=float).reshape(-1, 2)
+            if points.shape[0] < 4:
+                return None
+            return (
+                round(float(points[:, 0].min())),
+                round(float(points[:, 1].min())),
+                round(float(points[:, 0].max())),
+                round(float(points[:, 1].max())),
+            )
+        except Exception:
+            return None
+
+    def _scan_rapidocr(self, crop: np.ndarray) -> list[dict]:
+        engine = self._get_rapidocr()
+        if engine is None:
+            return []
+        try:
+            result = engine(crop, use_cls=False, text_score=0.35)
+            txts = getattr(result, "txts", None)
+            boxes = getattr(result, "boxes", None)
+            scores = getattr(result, "scores", None)
+            if txts is None or boxes is None:
+                return []
+
+            candidates: list[dict] = []
+            for i, raw in enumerate(txts):
+                token = self._token(str(raw))
+                if not token:
+                    continue
+                try:
+                    confidence = float(scores[i])
+                except (TypeError, ValueError, IndexError):
+                    confidence = 0.0
+                if confidence < 0.25:
+                    continue
+                box = self._rapid_box(boxes[i])
+                if box is None:
+                    continue
+                candidates.append({
+                    "value": token,
+                    "confidence": round(confidence * 100.0, 1),
+                    "box": box,
+                })
+            return self._merge_ocr_tokens(candidates)
+        except Exception as exc:
+            self._rapidocr_error = str(exc)
+            return []
+
+    def _detect_candidates(self, crop: np.ndarray) -> tuple[dict[str, dict], list[dict]]:
+        # One RapidOCR pass over the complete HUD. Missing counters are
+        # handled later by the existing targeted Tesseract fallback.
+        candidates = self._scan_rapidocr(crop)
+        if candidates:
+            return self._assign_candidates(candidates, crop.shape[1]), candidates
+        return self._startup_scan(crop)
 
     def _assign_candidates(self, candidates: list[dict], width: float) -> dict[str, dict]:
         """Assign one OCR token to each calibrated resource anchor."""
