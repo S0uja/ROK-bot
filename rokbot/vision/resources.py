@@ -20,7 +20,7 @@ class ResourceDetection:
     boxes: dict[str, tuple[int,int,int,int]] = None
 
 class ResourceDetector:
-    """Detect resources only inside the calibrated resources UI region."""
+    """Detect resources from the calibrated HUD."""
     def __init__(self,regions:UIRegions|None=None)->None:
         self.regions=regions or UIRegions()
         self._configure_tesseract()
@@ -28,6 +28,7 @@ class ResourceDetector:
         self._pending_values: dict[str, str] = {}
         self._pending_counts: dict[str, int] = {}
         self._stable_boxes: dict[str, tuple[int,int,int,int]] = {}
+        self._startup_scan_done = False
 
     @staticmethod
     def _configure_tesseract():
@@ -48,9 +49,7 @@ class ResourceDetector:
 
     @staticmethod
     def _extract_tokens(data: dict, x1: int, scale: int) -> list[dict]:
-        """Extract numeric tokens and merge split thousands groups."""
         tokens: list[dict] = []
-
         for i, raw in enumerate(data.get("text", [])):
             token = ResourceDetector._token(raw)
             if not token:
@@ -59,11 +58,7 @@ class ResourceDetector:
                 conf = float(data["conf"][i])
             except (TypeError, ValueError):
                 conf = -1.0
-
             digits = len(re.sub(r"[^0-9]", "", token))
-            # Short fragments below 30% confidence are normally noise.
-            # A long counter (4+ digits) can still be valid at lower
-            # confidence because the icon/background makes OCR harder.
             if conf < 30 and digits < 4:
                 continue
             if conf < 18:
@@ -73,15 +68,12 @@ class ResourceDetector:
             top = float(data["top"][i]) / scale
             right = (float(data["left"][i]) + float(data["width"][i])) / scale
             bottom = (float(data["top"][i]) + float(data["height"][i])) / scale
-
             tokens.append({
                 "value": token,
                 "confidence": round(conf, 1),
                 "box": (
-                    round(x1 + left),
-                    round(top),
-                    round(x1 + right),
-                    round(bottom),
+                    round(x1 + left), round(top),
+                    round(x1 + right), round(bottom),
                 ),
             })
 
@@ -96,34 +88,25 @@ class ResourceDetector:
             prev = merged[-1]
             px1, py1, px2, py2 = prev["box"]
             x1i, y1i, x2i, y2i = item["box"]
-
             prev_h = max(1, py2 - py1)
             item_h = max(1, y2i - y1i)
             same_line = abs(((py1 + py2) / 2) - ((y1i + y2i) / 2)) <= max(prev_h, item_h) * 0.45
             gap = x1i - px2
             close = gap <= max(10.0, min(prev_h, item_h) * 0.9)
-
             prev_digits = re.sub(r"[^0-9]", "", prev["value"])
             item_digits = re.sub(r"[^0-9]", "", item["value"])
             can_merge = (
-                same_line
-                and close
-                and prev_digits
-                and item_digits
-                and len(prev_digits) <= 3
-                and len(item_digits) <= 3
+                same_line and close and prev_digits and item_digits
+                and len(prev_digits) <= 3 and len(item_digits) <= 3
                 and len(prev_digits) + len(item_digits) >= 4
             )
-
             if can_merge:
                 merged[-1] = {
                     "value": prev["value"] + item["value"],
                     "confidence": round(min(prev["confidence"], item["confidence"]), 1),
                     "box": (
-                        min(px1, x1i),
-                        min(py1, y1i),
-                        max(px2, x2i),
-                        max(py2, y2i),
+                        min(px1, x1i), min(py1, y1i),
+                        max(px2, x2i), max(py2, y2i),
                     ),
                 }
             else:
@@ -131,13 +114,92 @@ class ResourceDetector:
 
         return merged
 
+    def _assign_candidates(self, candidates: list[dict], width: float) -> dict[str, dict]:
+        """Assign one OCR token to each calibrated resource anchor."""
+        anchors = self.regions.anchors("resources")
+        assigned: dict[str, dict] = {}
+        used: set[int] = set()
+
+        for name in RESOURCE_NAMES:
+            anchor = anchors.get(name)
+            if anchor is None:
+                continue
+
+            best_index = None
+            best_distance = float("inf")
+            for index, item in enumerate(candidates):
+                if index in used:
+                    continue
+                distance = abs((item["box"][0] + item["box"][2]) / 2 / max(width, 1.0) - anchor)
+                if distance < best_distance:
+                    best_distance = distance
+                    best_index = index
+
+            if best_index is not None and best_distance <= 0.12:
+                assigned[name] = candidates[best_index]
+                used.add(best_index)
+
+        return assigned
+
+    def _run_ocr(self, variant: np.ndarray, psm: int):
+        try:
+            return pytesseract.image_to_data(
+                variant,
+                config=f"--oem 3 --psm {psm} -c tessedit_char_whitelist=0123456789.,KMBT",
+                output_type=pytesseract.Output.DICT,
+                timeout=1.0,
+            )
+        except RuntimeError:
+            return None
+
+    def _startup_scan(self, crop: np.ndarray) -> tuple[dict[str, dict], list[dict]]:
+        """Scan the whole resource HUD once after process startup."""
+        scale = 3
+        scaled = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        gray = cv2.cvtColor(scaled, cv2.COLOR_BGR2GRAY)
+
+        variants = [
+            gray,
+            cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)[1],
+            cv2.threshold(gray, 205, 255, cv2.THRESH_BINARY)[1],
+            cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY, 31, 7
+            ),
+        ]
+
+        best_candidates: list[dict] = []
+        best_score = -1
+
+        for variant in variants:
+            data = self._run_ocr(variant, 7)
+            if not data:
+                continue
+            parsed = self._extract_tokens(data, 0, scale)
+            if len(parsed) > len(best_candidates):
+                best_candidates = parsed
+                best_score = len(parsed)
+            elif len(parsed) == len(best_candidates) and parsed:
+                score = sum(max(0.0, x["confidence"]) for x in parsed)
+                if score > sum(max(0.0, x["confidence"]) for x in best_candidates):
+                    best_candidates = parsed
+
+        # Full-HUD fallback. This is only done once at startup.
+        if len(best_candidates) < 5:
+            for psm in (6, 11):
+                data = self._run_ocr(gray, psm)
+                if not data:
+                    continue
+                parsed = self._extract_tokens(data, 0, scale)
+                if len(parsed) > len(best_candidates):
+                    best_candidates = parsed
+
+        assigned = self._assign_candidates(best_candidates, crop.shape[1])
+        return assigned, best_candidates
+
     def _read_anchor(self, crop: np.ndarray, anchor: float, scale: int = 3) -> dict | None:
-        """OCR one calibrated resource slot with multiple robust text variants."""
         h, w = crop.shape[:2]
         center = int(anchor * w)
-
-        # Slightly wider than before. Wood/stone counters are visually
-        # similar to their neighboring icons and need more context.
         half = max(82, int(w * 0.105))
         x1 = max(0, center - half)
         x2 = min(w, center + half)
@@ -159,22 +221,9 @@ class ResourceDetector:
 
         best = None
 
-        def run(variant: np.ndarray, psm: int):
-            try:
-                return pytesseract.image_to_data(
-                    variant,
-                    config=f"--oem 3 --psm {psm} -c tessedit_char_whitelist=0123456789.,KMBT",
-                    output_type=pytesseract.Output.DICT,
-                    timeout=1.0,
-                )
-            except RuntimeError:
-                return None
-
         def choose(parsed: list[dict]):
             if not parsed:
                 return None
-            # Prefer complete counters (4+ digits) over fragments, then
-            # confidence. This is important for 92 658 and 4 329.
             return max(
                 parsed,
                 key=lambda item: (
@@ -185,10 +234,9 @@ class ResourceDetector:
             )
 
         for variant in variants:
-            data = run(variant, 7)
+            data = self._run_ocr(variant, 7)
             if not data:
                 continue
-
             parsed = self._extract_tokens(data, x1, scale)
             candidate = choose(parsed)
             if candidate is None:
@@ -203,14 +251,11 @@ class ResourceDetector:
             ):
                 best = candidate
 
-            # Good complete counter: stop here.
             if len(re.sub(r"[^0-9]", "", candidate["value"])) >= 4 and candidate["confidence"] >= 35:
                 return candidate
 
-        # PSM 6/11 fallbacks handle cases where the resource text is not a
-        # clean single line because of the icon and decorative background.
         for psm in (6, 11, 13):
-            data = run(gray, psm)
+            data = self._run_ocr(gray, psm)
             if not data:
                 continue
             parsed = self._extract_tokens(data, x1, scale)
@@ -240,22 +285,71 @@ class ResourceDetector:
             boxes: dict[str, tuple[int, int, int, int]] = {}
             candidates: list[dict] = []
 
-            for name in RESOURCE_NAMES:
-                anchor = anchors.get(name)
-                if anchor is None:
-                    continue
-                result = self._read_anchor(crop, anchor)
-                if result is None:
-                    continue
-                detected[name] = result["value"]
-                box = tuple(round(v) for v in result["box"])
-                boxes[name] = box
-                candidates.append({
-                    "value": result["value"],
-                    "x": round((box[0] + box[2]) / 2, 1),
-                    "y": round((box[1] + box[3]) / 2, 1),
-                    "confidence": result["confidence"],
-                })
+            # First frame after dashboard/process startup: scan the entire
+            # resource HUD together so we establish all five counters from
+            # one coherent screenshot. Subsequent refreshes use the faster
+            # per-resource calibrated slots.
+            if not self._startup_scan_done:
+                startup_assigned, startup_candidates = self._startup_scan(crop)
+                self._startup_scan_done = True
+                for name, result in startup_assigned.items():
+                    detected[name] = result["value"]
+                    boxes[name] = tuple(round(v) for v in result["box"])
+                    candidates.append({
+                        "value": result["value"],
+                        "x": round((result["box"][0] + result["box"][2]) / 2, 1),
+                        "y": round((result["box"][1] + result["box"][3]) / 2, 1),
+                        "confidence": result["confidence"],
+                    })
+
+                # Seed stable values immediately from the coherent startup
+                # scan. This avoids waiting two refreshes to populate the HUD.
+                for name, value in detected.items():
+                    self._stable_values[name] = value
+                    if name in boxes:
+                        self._stable_boxes[name] = boxes[name]
+
+            # Normal fast path after startup: read each calibrated slot.
+            if self._startup_scan_done and not detected:
+                for name in RESOURCE_NAMES:
+                    anchor = anchors.get(name)
+                    if anchor is None:
+                        continue
+                    result = self._read_anchor(crop, anchor)
+                    if result is None:
+                        continue
+                    detected[name] = result["value"]
+                    box = tuple(round(v) for v in result["box"])
+                    boxes[name] = box
+                    candidates.append({
+                        "value": result["value"],
+                        "x": round((box[0] + box[2]) / 2, 1),
+                        "y": round((box[1] + box[3]) / 2, 1),
+                        "confidence": result["confidence"],
+                    })
+
+            # If startup found at least one resource, also refresh missing
+            # resources individually so a single weak OCR token doesn't make
+            # the rest of the HUD disappear.
+            if self._startup_scan_done:
+                for name in RESOURCE_NAMES:
+                    if name in detected:
+                        continue
+                    anchor = anchors.get(name)
+                    if anchor is None:
+                        continue
+                    result = self._read_anchor(crop, anchor)
+                    if result is None:
+                        continue
+                    detected[name] = result["value"]
+                    box = tuple(round(v) for v in result["box"])
+                    boxes[name] = box
+                    candidates.append({
+                        "value": result["value"],
+                        "x": round((box[0] + box[2]) / 2, 1),
+                        "y": round((box[1] + box[3]) / 2, 1),
+                        "confidence": result["confidence"],
+                    })
 
             values = dict(self._stable_values)
             for name, candidate in detected.items():
