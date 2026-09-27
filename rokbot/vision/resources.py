@@ -46,39 +46,9 @@ class ResourceDetector:
         if len(re.sub(r"[^0-9]","",token))<2: return None
         return token
 
-    def _assign_candidates(self, candidates: list[dict], width: float) -> dict[str, str]:
-        """Assign OCR tokens to calibrated resource anchors."""
-        anchors = self.regions.anchors("resources")
-        if not anchors:
-            return {}
-
-        values: dict[str, str] = {}
-        used: set[int] = set()
-
-        for name in RESOURCE_NAMES:
-            anchor = anchors.get(name)
-            if anchor is None:
-                continue
-
-            best_index = None
-            best_distance = float("inf")
-            for index, item in enumerate(candidates):
-                if index in used:
-                    continue
-                distance = abs((item["x"] / max(width, 1.0)) - anchor)
-                if distance < best_distance:
-                    best_distance = distance
-                    best_index = index
-
-            if best_index is not None and best_distance <= 0.12:
-                values[name] = candidates[best_index]["value"]
-                used.add(best_index)
-
-        return values
-
     @staticmethod
     def _extract_tokens(data: dict, x1: int, scale: int) -> list[dict]:
-        """Extract confident numeric tokens and merge split thousands groups."""
+        """Extract numeric tokens and merge split thousands groups."""
         tokens: list[dict] = []
 
         for i, raw in enumerate(data.get("text", [])):
@@ -90,9 +60,13 @@ class ResourceDetector:
             except (TypeError, ValueError):
                 conf = -1.0
 
-            # Very low-confidence garbage is much more likely to be a
-            # fragment from an icon/background than the resource counter.
-            if conf < 30:
+            digits = len(re.sub(r"[^0-9]", "", token))
+            # Short fragments below 30% confidence are normally noise.
+            # A long counter (4+ digits) can still be valid at lower
+            # confidence because the icon/background makes OCR harder.
+            if conf < 30 and digits < 4:
+                continue
+            if conf < 18:
                 continue
 
             left = float(data["left"][i]) / scale
@@ -113,10 +87,6 @@ class ResourceDetector:
 
         tokens.sort(key=lambda item: (item["box"][1], item["box"][0]))
 
-        # RoK can render a resource counter with a thousands separator
-        # (for example "92 658"). Tesseract may return that as two tokens
-        # ("92" + "658"). Merge adjacent numeric fragments before selecting
-        # the result, otherwise the OCR can incorrectly expose only "658".
         merged: list[dict] = []
         for item in tokens:
             if not merged:
@@ -131,7 +101,7 @@ class ResourceDetector:
             item_h = max(1, y2i - y1i)
             same_line = abs(((py1 + py2) / 2) - ((y1i + y2i) / 2)) <= max(prev_h, item_h) * 0.45
             gap = x1i - px2
-            close = gap <= max(8.0, min(prev_h, item_h) * 0.75)
+            close = gap <= max(10.0, min(prev_h, item_h) * 0.9)
 
             prev_digits = re.sub(r"[^0-9]", "", prev["value"])
             item_digits = re.sub(r"[^0-9]", "", item["value"])
@@ -162,12 +132,16 @@ class ResourceDetector:
         return merged
 
     def _read_anchor(self, crop: np.ndarray, anchor: float, scale: int = 3) -> dict | None:
-        """OCR one calibrated resource slot, using the minimum needed passes."""
+        """OCR one calibrated resource slot with multiple robust text variants."""
         h, w = crop.shape[:2]
         center = int(anchor * w)
-        half = max(70, int(w * 0.085))
+
+        # Slightly wider than before. Wood/stone counters are visually
+        # similar to their neighboring icons and need more context.
+        half = max(82, int(w * 0.105))
         x1 = max(0, center - half)
         x2 = min(w, center + half)
+
         slot = crop[:, x1:x2]
         slot = cv2.resize(slot, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         gray = cv2.cvtColor(slot, cv2.COLOR_BGR2GRAY)
@@ -175,11 +149,14 @@ class ResourceDetector:
         variants = [
             gray,
             cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)[1],
+            cv2.threshold(gray, 205, 255, cv2.THRESH_BINARY)[1],
+            cv2.threshold(gray, 225, 255, cv2.THRESH_BINARY)[1],
             cv2.adaptiveThreshold(
                 gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                 cv2.THRESH_BINARY, 31, 7
             ),
         ]
+
         best = None
 
         def run(variant: np.ndarray, psm: int):
@@ -193,41 +170,63 @@ class ResourceDetector:
             except RuntimeError:
                 return None
 
+        def choose(parsed: list[dict]):
+            if not parsed:
+                return None
+            # Prefer complete counters (4+ digits) over fragments, then
+            # confidence. This is important for 92 658 and 4 329.
+            return max(
+                parsed,
+                key=lambda item: (
+                    len(re.sub(r"[^0-9]", "", item["value"])) >= 4,
+                    len(re.sub(r"[^0-9]", "", item["value"])),
+                    item["confidence"],
+                ),
+            )
+
         for variant in variants:
             data = run(variant, 7)
             if not data:
                 continue
 
             parsed = self._extract_tokens(data, x1, scale)
-            if parsed:
-                candidate = max(parsed, key=lambda item: item["confidence"])
-                if best is None or candidate["confidence"] > best["confidence"]:
-                    best = candidate
-                # A merged multi-token number is more trustworthy than a
-                # single short fragment, so return it immediately.
-                if any(len(re.sub(r"[^0-9]", "", item["value"])) >= 4 for item in parsed):
-                    return max(
-                        parsed,
-                        key=lambda item: (
-                            len(re.sub(r"[^0-9]", "", item["value"])) >= 4,
-                            item["confidence"],
-                        ),
-                    )
+            candidate = choose(parsed)
+            if candidate is None:
+                continue
 
-            if best is not None and best["confidence"] >= 45:
-                return best
+            if best is None or (
+                len(re.sub(r"[^0-9]", "", candidate["value"])) >= 4
+                and len(re.sub(r"[^0-9]", "", best["value"])) < 4
+            ) or (
+                len(re.sub(r"[^0-9]", "", candidate["value"])) == len(re.sub(r"[^0-9]", "", best["value"]))
+                and candidate["confidence"] > best["confidence"]
+            ):
+                best = candidate
 
-        data = run(gray, 11)
-        if data:
+            # Good complete counter: stop here.
+            if len(re.sub(r"[^0-9]", "", candidate["value"])) >= 4 and candidate["confidence"] >= 35:
+                return candidate
+
+        # PSM 6/11 fallbacks handle cases where the resource text is not a
+        # clean single line because of the icon and decorative background.
+        for psm in (6, 11, 13):
+            data = run(gray, psm)
+            if not data:
+                continue
             parsed = self._extract_tokens(data, x1, scale)
-            if parsed:
-                return max(
-                    parsed,
-                    key=lambda item: (
-                        len(re.sub(r"[^0-9]", "", item["value"])) >= 4,
-                        item["confidence"],
-                    ),
-                )
+            candidate = choose(parsed)
+            if candidate is None:
+                continue
+            if best is None or (
+                len(re.sub(r"[^0-9]", "", candidate["value"])) > len(re.sub(r"[^0-9]", "", best["value"]))
+            ) or (
+                len(re.sub(r"[^0-9]", "", candidate["value"])) == len(re.sub(r"[^0-9]", "", best["value"]))
+                and candidate["confidence"] > best["confidence"]
+            ):
+                best = candidate
+            if len(re.sub(r"[^0-9]", "", candidate["value"])) >= 4:
+                return candidate
+
         return best
 
     def detect(self, image: np.ndarray) -> ResourceDetection:
