@@ -237,3 +237,28 @@ async function runTask(name){
 }
 document.querySelectorAll("[data-task]").forEach(b=>b.onclick=()=>runTask(b.dataset.task));
 setInterval(loadBotStatus,1000); loadBotStatus();
+
+
+async function runResourceSearch(){
+  const resource=$("gatherResource").value;
+  const level=Number($("gatherLevel").value);
+  const result=$("taskResult");
+  result.textContent="Выполняю поиск: "+resource+" L"+level+"...";
+  document.querySelectorAll("[data-task],#searchResource").forEach(b=>b.disabled=true);
+  try{
+    const r=await fetch("/api/bot/tasks/search_resource",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({resource,level})
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||d.message||"Ошибка");
+    result.textContent=(d.ok?"✅ ":"❌ ")+d.message+(d.state?" · "+d.state:"");
+  }catch(e){
+    result.textContent="❌ "+e.message;
+  }finally{
+    document.querySelectorAll("[data-task],#searchResource").forEach(b=>b.disabled=false);
+    loadBotStatus(); load();
+  }
+}
+$("searchResource").onclick=runResourceSearch;
