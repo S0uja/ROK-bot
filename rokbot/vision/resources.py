@@ -75,8 +75,8 @@ class ResourceDetector:
 
         return values
 
-    def _read_anchor(self, crop: np.ndarray, anchor: float, scale: int = 4) -> dict | None:
-        """OCR one resource slot and return its text box in crop coordinates."""
+    def _read_anchor(self, crop: np.ndarray, anchor: float, scale: int = 3) -> dict | None:
+        """OCR one calibrated resource slot, using the minimum needed passes."""
         h, w = crop.shape[:2]
         center = int(anchor * w)
         half = max(70, int(w * 0.085))
@@ -85,135 +85,112 @@ class ResourceDetector:
         slot = crop[:, x1:x2]
         slot = cv2.resize(slot, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         gray = cv2.cvtColor(slot, cv2.COLOR_BGR2GRAY)
-        # Resource numbers are small, bright HUD text. Use several OCR
-        # layouts/preprocessing variants because individual slots can differ
-        # slightly in contrast and icon overlap.
+
+        # Fast path first. Only try extra preprocessing when the previous
+        # pass found no usable numeric token.
         variants = [
             gray,
-            cv2.threshold(gray, 125, 255, cv2.THRESH_BINARY)[1],
-            cv2.threshold(gray, 145, 255, cv2.THRESH_BINARY)[1],
             cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)[1],
-            cv2.threshold(gray, 205, 255, cv2.THRESH_BINARY)[1],
-            cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                  cv2.THRESH_BINARY, 31, 7),
+            cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY, 31, 7
+            ),
         ]
         best = None
-        for variant in variants:
-            for psm in (6, 7, 11, 13):
-                data = pytesseract.image_to_data(
+
+        def run(variant: np.ndarray, psm: int):
+            try:
+                return pytesseract.image_to_data(
                     variant,
-                    config=f"--psm {psm} -c tessedit_char_whitelist=0123456789.,KMBT",
-                    output_type=pytesseract.Output.DICT)
-                for i, raw in enumerate(data.get("text", [])):
-                    token = self._token(raw)
-                    if not token:
-                        continue
-                    try:
-                        conf = float(data["conf"][i])
-                    except (TypeError, ValueError):
-                        conf = -1.0
-                    candidate = {
-                        "value": token,
-                        "confidence": round(conf, 1),
-                        "box": (
-                            round(x1 + data["left"][i] / scale),
-                            round(data["top"][i] / scale),
-                            round(x1 + (data["left"][i] + data["width"][i]) / scale),
-                            round((data["top"][i] + data["height"][i]) / scale),
-                        ),
-                    }
-                    if best is None or candidate["confidence"] > best["confidence"]:
-                        best = candidate
+                    config=f"--oem 3 --psm {psm} -c tessedit_char_whitelist=0123456789.,KMBT",
+                    output_type=pytesseract.Output.DICT,
+                    timeout=1.0,
+                )
+            except RuntimeError:
+                return None
+
+        for variant in variants:
+            data = run(variant, 7)
+            if not data:
+                continue
+            for i, raw in enumerate(data.get("text", [])):
+                token = self._token(raw)
+                if not token:
+                    continue
+                try:
+                    conf = float(data["conf"][i])
+                except (TypeError, ValueError):
+                    conf = -1.0
+                candidate = {
+                    "value": token,
+                    "confidence": round(conf, 1),
+                    "box": (
+                        round(x1 + data["left"][i] / scale),
+                        round(data["top"][i] / scale),
+                        round(x1 + (data["left"][i] + data["width"][i]) / scale),
+                        round((data["top"][i] + data["height"][i]) / scale),
+                    ),
+                }
+                if best is None or candidate["confidence"] > best["confidence"]:
+                    best = candidate
+            if best is not None and best["confidence"] >= 45:
+                return best
+
+        # Sparse-text fallback only when the fast line OCR failed.
+        data = run(gray, 11)
+        if data:
+            for i, raw in enumerate(data.get("text", [])):
+                token = self._token(raw)
+                if not token:
+                    continue
+                try:
+                    conf = float(data["conf"][i])
+                except (TypeError, ValueError):
+                    conf = -1.0
+                candidate = {
+                    "value": token,
+                    "confidence": round(conf, 1),
+                    "box": (
+                        round(x1 + data["left"][i] / scale),
+                        round(data["top"][i] / scale),
+                        round(x1 + (data["left"][i] + data["width"][i]) / scale),
+                        round((data["top"][i] + data["height"][i]) / scale),
+                    ),
+                }
+                if best is None or candidate["confidence"] > best["confidence"]:
+                    best = candidate
         return best
 
-    def detect(self,image:np.ndarray)->ResourceDetection:
+    def detect(self, image: np.ndarray) -> ResourceDetection:
         try:
-            h,w=image.shape[:2]
-            x1,y1,x2,y2=self.regions.get("resources").pixels(w,h)
-            crop=image[y1:y2,x1:x2]
-            scale=3
-            crop=cv2.resize(crop,None,fx=scale,fy=scale,interpolation=cv2.INTER_CUBIC)
-            gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
-            variants = [
-                ("gray", gray, "--psm 11"),
-                ("line", gray, "--psm 7"),
-                ("threshold", cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)[1], "--psm 7"),
-                ("adaptive", cv2.adaptiveThreshold(
-                    gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    cv2.THRESH_BINARY, 31, 8
-                ), "--psm 7"),
-            ]
-
-            found=[]
-            for _, variant, psm in variants:
-                data=pytesseract.image_to_data(
-                    variant,
-                    config=f"{psm} -c tessedit_char_whitelist=0123456789.,KMBT",
-                    output_type=pytesseract.Output.DICT,
-                )
-                for i,raw in enumerate(data.get("text",[])):
-                    token=self._token(raw)
-                    if not token: continue
-                    try:
-                        conf=float(data["conf"][i])
-                    except (TypeError, ValueError):
-                        conf=-1.0
-                    cx=(data["left"][i]+data["width"][i]/2)/scale
-                    cy=(data["top"][i]+data["height"][i]/2)/scale
-                    found.append({
-                        "value": token,
-                        "x": round(cx,1),
-                        "y": round(cy,1),
-                        "confidence": round(conf,1),
-                    })
-
-            # Keep the strongest OCR result for approximately the same position.
-            deduped=[]
-            for item in sorted(found, key=lambda x:(x["x"], -x["confidence"])):
-                duplicate=False
-                for existing in deduped:
-                    if (
-                        abs(item["x"] - existing["x"]) <= 18
-                        and abs(item["y"] - existing["y"]) <= 12
-                    ):
-                        duplicate=True
-                        if item["confidence"] > existing["confidence"]:
-                            existing.update(item)
-                        break
-                if not duplicate:
-                    deduped.append(item)
-            found=sorted(deduped, key=lambda x:x["x"])
-
-            # RoK may render large values with a visual space, e.g. "88 058"
-            # or "4 329". Merge nearby numeric OCR fragments on the same row.
-            merged=[]
-            for item in found:
-                if merged:
-                    prev=merged[-1]
-                    gap=item["x"] - prev["x"]
-                    same_row=abs(item["y"] - prev["y"]) <= 18
-                    if same_row and gap <= 55 and len(prev["value"]) <= 3:
-                        prev["value"] += item["value"]
-                        prev["x"] = round((prev["x"] + item["x"]) / 2, 1)
-                        prev["confidence"] = min(prev["confidence"], item["confidence"])
-                        continue
-                merged.append(item)
-            found=merged
-            detected = {}
-            boxes = {}
+            h, w = image.shape[:2]
+            x1, y1, x2, y2 = self.regions.get("resources").pixels(w, h)
+            crop = image[y1:y2, x1:x2]
             anchors = self.regions.anchors("resources")
+
+            detected: dict[str, str] = {}
+            boxes: dict[str, tuple[int, int, int, int]] = {}
+            candidates: list[dict] = []
+
+            # OCR only the five calibrated slots. This avoids running
+            # full-region Tesseract passes on every dashboard refresh.
             for name in RESOURCE_NAMES:
                 anchor = anchors.get(name)
                 if anchor is None:
                     continue
                 result = self._read_anchor(crop, anchor)
-                if result is not None:
-                    detected[name] = result["value"]
-                    boxes[name] = tuple(round(v / scale) for v in result["box"])
+                if result is None:
+                    continue
+                detected[name] = result["value"]
+                box = tuple(round(v) for v in result["box"])
+                boxes[name] = box
+                candidates.append({
+                    "value": result["value"],
+                    "x": round((box[0] + box[2]) / 2, 1),
+                    "y": round((box[1] + box[3]) / 2, 1),
+                    "confidence": result["confidence"],
+                })
 
-            # OCR can fluctuate from frame to frame. Require two consecutive
-            # observations before accepting a changed value, while retaining
-            # the last good value during a transient OCR miss.
             values = dict(self._stable_values)
             for name, candidate in detected.items():
                 if candidate == self._stable_values.get(name):
@@ -237,11 +214,12 @@ class ResourceDetector:
 
             return ResourceDetection(
                 values,
-                " ".join(x["value"] for x in found),
-                found,
+                " ".join(x["value"] for x in candidates),
+                candidates,
                 True,
                 None,
                 self._stable_boxes,
             )
+
         except Exception as exc:
             return ResourceDetection({}, "", [], False, str(exc))
