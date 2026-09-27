@@ -1,25 +1,16 @@
 from __future__ import annotations
-
 from pathlib import Path
-
 import yaml
-
+from rokbot.core.config import ROOT, CONFIG_DIR
 
 class ROKControls:
-    """Semantic click targets calibrated in normalized screen coordinates."""
-
-    def __init__(self, config_path: str | Path = "config/rok_controls.yaml") -> None:
-        path = Path(config_path)
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        self.controls: dict[str, dict[str, float]] = {}
-
-        for group, controls in data.get("controls", {}).items():
-            for name, point in controls.items():
-                self.controls[f"{group}.{name}"] = point
-
-    def point(self, name: str, width: int, height: int) -> tuple[int, int]:
-        point = self.controls[name]
-        return round(point["x"] * width), round(point["y"] * height)
-
-    def names(self) -> list[str]:
-        return sorted(self.controls)
+    def __init__(self,config_path:str|Path|None=None)->None:
+        path=Path(config_path) if config_path else CONFIG_DIR/"rok_controls.yaml"
+        if not path.is_absolute(): path=ROOT/path
+        data=yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        self.controls={}
+        for group,items in data.get("controls",{}).items():
+            for name,point in items.items(): self.controls[f"{group}.{name}"]=point
+    def point(self,name,width,height):
+        p=self.controls[name]; return round(p["x"]*width),round(p["y"]*height)
+    def names(self): return sorted(self.controls)
