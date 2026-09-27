@@ -53,10 +53,14 @@ class Screen:
 
     def capture_cv(self) -> np.ndarray:
         """Return the current screen as an OpenCV BGR image."""
+        # Decode the PNG bytes directly with OpenCV. This avoids the PIL
+        # decode + RGB conversion round-trip used by the generic capture().
+        raw = self.capture_bytes()
         started = time.perf_counter()
-        rgb = np.asarray(self.capture())
-        image = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
         self._last_png_decode_ms = (time.perf_counter() - started) * 1000.0
+        if image is None:
+            raise RuntimeError("OpenCV could not decode ADB screenshot PNG")
         return image
 
     def save(self, output: str | Path) -> Path:
