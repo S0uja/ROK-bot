@@ -30,9 +30,14 @@ class SearchResourceTask:
         w, h = ctx.adb.display_size()
         x, y = self.controls.point(name, w, h)
         ctx.adb.tap(x, y)
+        print(f"[RESOURCE] tap {name}: ({x}, {y}) on {w}x{h}")
         if pause:
             time.sleep(pause)
         return x, y
+
+    def _debug_frame(self, ctx: TaskContext, filename: str) -> None:
+        path = ctx.screen.save(ctx.screen.adb.__class__.__module__ and __import__("pathlib").Path("logs") / filename)
+        print(f"[RESOURCE] screenshot: {path}")
 
 
     def run(self, ctx: TaskContext) -> TaskResult:
@@ -88,7 +93,9 @@ class SearchResourceTask:
                 ctx, "resource_search.level_plus", pause=0.08
             )
 
+        self._debug_frame(ctx, "resource_before_search.png")
         taps["search"] = self._tap(ctx, "resource_search.search", pause=0.8)
+        self._debug_frame(ctx, "resource_after_search.png")
         taps["collect"] = self._tap(ctx, "resource_search.collect", pause=0.8)
         taps["new_troops"] = self._tap(ctx, "resource_search.new_troops", pause=0.8)
         taps["march"] = self._tap(ctx, "resource_search.march", pause=0.8)
