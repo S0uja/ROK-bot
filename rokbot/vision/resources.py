@@ -125,15 +125,16 @@ class ResourceDetector:
             return None
         try:
             from rapidocr import RapidOCR
+            # Resource coordinates are calibrated, so text detection is unnecessary.
+            # RapidOCR can run recognition-only and accepts a batch of image crops.
             self._rapidocr = RapidOCR(params={
                 "Global.text_score": 0.20,
-                "Global.min_height": 10,
-                "Global.width_height_ratio": -1,
-                "Global.max_side_len": 3000,
-                "Global.min_side_len": 10,
-                "Det.thresh": 0.20,
-                "Det.box_thresh": 0.20,
+                "Global.use_det": False,
                 "Global.use_cls": False,
+                "Global.use_rec": True,
+                "Global.max_side_len": 1000,
+                "Global.min_side_len": 10,
+                "Global.return_word_box": False,
             })
             return self._rapidocr
         except Exception as exc:
@@ -184,22 +185,57 @@ class ResourceDetector:
             return None
 
     def _scan_rapidocr(self, crop: np.ndarray) -> list[dict]:
+        """Recognize the five calibrated resource slots without text detection."""
         started = time.perf_counter()
         engine = self._get_rapidocr()
         if engine is None:
             return []
+
         try:
-            result = engine(crop, use_cls=False)
+            h, w = crop.shape[:2]
+            anchors = self.regions.anchors("resources")
+            slots: list[np.ndarray] = []
+            slot_boxes: list[tuple[int, int, int, int]] = []
+
+            # Keep each input small: the resource number is already localized
+            # by calibration, so there is no reason to OCR the full HUD.
+            half = max(90, int(w * 0.075))
+            y1 = max(0, int(h * 0.02))
+            y2 = min(h, int(h * 0.98))
+
+            for name in RESOURCE_NAMES:
+                anchor = anchors.get(name)
+                if anchor is None:
+                    continue
+                center = int(anchor * w)
+                x1 = max(0, center - half)
+                x2 = min(w, center + half)
+                slot = crop[y1:y2, x1:x2]
+                if slot.size == 0:
+                    continue
+                slots.append(slot)
+                slot_boxes.append((x1, y1, x2, y2))
+
+            if not slots:
+                return []
+
+            # Recognition-only supports a batch, so the model runs once for
+            # all five counters instead of running text detection five times.
+            result = engine(
+                slots,
+                use_det=False,
+                use_cls=False,
+                use_rec=True,
+            )
             txts = getattr(result, "txts", None)
-            boxes = getattr(result, "boxes", None)
             scores = getattr(result, "scores", None)
-            if txts is None or boxes is None:
+            if txts is None or scores is None:
                 return []
 
             candidates: list[dict] = []
             for i, raw in enumerate(txts):
                 token = self._token(str(raw))
-                if not token:
+                if not token or i >= len(slot_boxes):
                     continue
                 try:
                     confidence = float(scores[i])
@@ -207,28 +243,36 @@ class ResourceDetector:
                     confidence = 0.0
                 if confidence < 0.20:
                     continue
-                box = self._rapid_box(boxes[i])
-                if box is None:
-                    continue
+
+                bx1, by1, bx2, by2 = slot_boxes[i]
                 candidates.append({
                     "value": token,
                     "confidence": round(confidence * 100.0, 1),
-                    "box": box,
+                    "box": (bx1, by1, bx2, by2),
                 })
+
             self._last_rapidocr_ms = (time.perf_counter() - started) * 1000.0
-            return self._merge_ocr_tokens(candidates)
+            return candidates
         except Exception as exc:
             self._last_rapidocr_ms = (time.perf_counter() - started) * 1000.0
             self._rapidocr_error = str(exc)
             return []
 
     def _detect_candidates(self, crop: np.ndarray) -> tuple[dict[str, dict], list[dict]]:
-        # One RapidOCR pass over the complete HUD. Missing counters are
-        # handled later by the existing targeted Tesseract fallback.
         candidates = self._scan_rapidocr(crop)
+
+        # Tesseract is a startup-only recovery path. Once the first scan has
+        # completed, a temporary RapidOCR miss must never re-run Tesseract.
         if candidates:
-            return self._assign_candidates(candidates, crop.shape[1]), candidates
-        return self._startup_scan(crop)
+            assigned = self._assign_candidates(candidates, crop.shape[1])
+            if self._startup_scan_done or len(assigned) >= len(RESOURCE_NAMES):
+                return assigned, candidates
+
+        if not self._startup_scan_done:
+            startup_assigned, startup_candidates = self._startup_scan(crop)
+            return startup_assigned, startup_candidates
+
+        return self._assign_candidates(candidates, crop.shape[1]), candidates
 
     def _assign_candidates(self, candidates: list[dict], width: float) -> dict[str, dict]:
         """Assign one OCR token to each calibrated resource anchor."""
@@ -438,36 +482,7 @@ class ResourceDetector:
                     if name in boxes:
                         self._stable_boxes[name] = boxes[name]
 
-            # Tesseract is deliberately limited to startup / uninitialized
-            # resources. Running several Tesseract variants on every frame can
-            # add multiple seconds to the polling loop when RapidOCR misses a
-            # single tiny counter. Once a resource is known, keep its stable
-            # value until RapidOCR sees a new value.
-            anchors = self.regions.anchors("resources")
-            if not self._startup_scan_done:
-                for name in RESOURCE_NAMES:
-                    if name in detected:
-                        continue
-                    anchor = anchors.get(name)
-                    if anchor is None:
-                        continue
-
-                    result = self._read_anchor(crop, anchor)
-                    if result is None:
-                        continue
-
-                    detected[name] = result["value"]
-                    box = tuple(round(v) for v in result["box"])
-                    boxes[name] = box
-                    candidates.append({
-                        "value": result["value"],
-                        "x": round((box[0] + box[2]) / 2, 1),
-                        "y": round((box[1] + box[3]) / 2, 1),
-                        "confidence": result["confidence"],
-                        "box": [int(v) for v in box],
-                        "resource": name,
-                        "engine": "tesseract_fallback",
-                    })
+            # Tesseract is used only by _startup_scan().
 
             values = dict(self._stable_values)
             for name, candidate in detected.items():
