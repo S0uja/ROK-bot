@@ -1,9 +1,9 @@
-from pathlib import Path
-
 from rokbot.core.adb import ADBClient
+from rokbot.core.config import load_settings
 
 
 def main() -> None:
+    settings = load_settings()
     adb = ADBClient()
 
     print(f"ADB: {adb.executable}")
@@ -18,7 +18,7 @@ def main() -> None:
     adb.device = devices[0]
     print(f"Using device: {adb.device}")
 
-    path = adb.screenshot(Path("screenshots/test.png"))
+    path = adb.screenshot(settings.screenshot_dir / "test.png")
     print(f"Screenshot saved to: {path}")
 
 
