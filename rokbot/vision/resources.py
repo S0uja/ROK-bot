@@ -27,6 +27,7 @@ class ResourceDetector:
         self._stable_values: dict[str, str] = {}
         self._pending_values: dict[str, str] = {}
         self._pending_counts: dict[str, int] = {}
+        self._stable_boxes: dict[str, tuple[int,int,int,int]] = {}
     @staticmethod
     def _configure_tesseract():
         for p in (Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),Path.home()/"AppData/Local/Programs/Tesseract-OCR/tesseract.exe"):
@@ -216,6 +217,8 @@ class ResourceDetector:
                     self._pending_counts[name] = 1
                 if self._pending_counts[name] >= 2:
                     self._stable_values[name] = candidate
+                    if name in boxes:
+                        self._stable_boxes[name] = boxes[name]
                     values[name] = candidate
                     self._pending_values.pop(name, None)
                     self._pending_counts.pop(name, None)
@@ -226,7 +229,7 @@ class ResourceDetector:
                 found,
                 True,
                 None,
-                boxes,
+                self._stable_boxes,
             )
         except Exception as exc:
             return ResourceDetection({}, "", [], False, str(exc))
