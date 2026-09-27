@@ -32,35 +32,41 @@ async function openCalibration(){
   $("calibrationImage").onload=renderCalibration;
 }
 function renderCalibration(){
-  const img=$("calibrationImage"), overlay=$("calibrationOverlay");
+  const img=$("calibrationImage"), overlay=$("calibrationOverlay"), canvas=$("calibrationCanvas");
   overlay.innerHTML="";
-  overlay.style.left=img.offsetLeft+"px";
-  overlay.style.top=img.offsetTop+"px";
-  overlay.style.width=img.clientWidth+"px";
-  overlay.style.height=img.clientHeight+"px";
-  const scaleX=img.clientWidth/calibrationState.width;
+  const ir=img.getBoundingClientRect();
+  const cr=canvas.getBoundingClientRect();
+  overlay.style.left=(ir.left-cr.left)+"px";
+  overlay.style.top=(ir.top-cr.top)+"px";
+  overlay.style.width=ir.width+"px";
+  overlay.style.height=ir.height+"px";
+
+  const scaleX=ir.width/calibrationState.width;
+  const scaleY=ir.height/calibrationState.height;
+
   names.forEach(name=>{
     const a=calibrationState.anchors[name];
     const slotW=calibrationState.slot_width;
     const left=((calibrationState.region_x+a*calibrationState.region_width)-slotW/2)*scaleX;
-    const top=calibrationState.region_y*(img.clientHeight/calibrationState.height);
+    const top=calibrationState.region_y*scaleY;
     const box=document.createElement("div");
     box.className="cal-box";
     box.dataset.name=name;
     box.style.left=left+"px";
     box.style.top=top+"px";
     box.style.width=(slotW*scaleX)+"px";
-    box.style.height=(calibrationState.region_height*(img.clientHeight/calibrationState.height))+"px";
+    box.style.height=(calibrationState.region_height*scaleY)+"px";
     box.innerHTML='<b>'+labels[name]+'</b><span>'+name+'</span>';
     overlay.appendChild(box);
     makeDraggable(box,name,scaleX);
   });
+
   const yInput=$("calibrationY");
   yInput.max=Math.max(0,calibrationState.height-calibrationState.region_height);
   yInput.value=Math.round(calibrationState.region_y);
   $("calibrationYValue").textContent=Math.round(calibrationState.region_y)+" px";
   $("calibrationValues").innerHTML=names.map(name=>'<div><b>'+labels[name]+'</b><span id="cal-'+name+'">'+(calibrationState.values?.[name]||"—")+'</span></div>').join("");
-  $("calibrationMessage").textContent="Перетащи каждую рамку горизонтально на цифру. После этого нажми «Сохранить».";
+  $("calibrationMessage").textContent="Y — реальная координата эмулятора. 0 px = самый верх экрана.";
 }
 function makeDraggable(box,name,scaleX){
   let startX=0,startY=0,startAnchor=0,startRegionY=0;
@@ -93,7 +99,7 @@ function makeDraggable(box,name,scaleX){
   };
 }
 function imgScaleY(){
-  return $("calibrationImage").clientHeight/calibrationState.height;
+  return $("calibrationImage").getBoundingClientRect().height/calibrationState.height;
 }
 async function saveCalibration(){
   $("calibrationMessage").textContent="Сохраняю...";
