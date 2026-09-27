@@ -218,3 +218,22 @@ window.addEventListener("resize",()=>{if($("calibration").classList.contains("sh
 load();
 loadResources();
 loadPerf();
+
+async function loadBotStatus(){
+  try{
+    const r=await fetch("/api/bot?t="+Date.now(),{cache:"no-store"}); const d=await r.json();
+    $("botStatus").textContent=d.running?"Выполняется":"Ожидание";
+  }catch(e){}
+}
+async function runTask(name){
+  const result=$("taskResult"); result.textContent="Выполняю: "+name+"...";
+  document.querySelectorAll("[data-task]").forEach(b=>b.disabled=true);
+  try{
+    const r=await fetch("/api/bot/tasks/"+encodeURIComponent(name),{method:"POST"}); const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||d.message||"Ошибка");
+    result.textContent=(d.ok?"✅ ":"❌ ")+d.message+(d.state?" · "+d.state:"");
+  }catch(e){ result.textContent="❌ "+e.message; }
+  finally{ document.querySelectorAll("[data-task]").forEach(b=>b.disabled=false); loadBotStatus(); load(); }
+}
+document.querySelectorAll("[data-task]").forEach(b=>b.onclick=()=>runTask(b.dataset.task));
+setInterval(loadBotStatus,1000); loadBotStatus();
