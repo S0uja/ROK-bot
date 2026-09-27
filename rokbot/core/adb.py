@@ -43,8 +43,10 @@ def find_adb() -> str:
 
 class ADBClient:
     def __init__(self, executable: str | None = None, device: str | None = None) -> None:
+        settings = load_settings()
         self.executable = executable or find_adb()
-        self.device = device
+        configured_device = settings.adb_device
+        self.device = device or (configured_device if configured_device.lower() != "auto" else None)
 
     def _cmd(self, *args: str) -> list[str]:
         cmd = [self.executable]
@@ -68,6 +70,8 @@ class ADBClient:
         return devices
 
     def select_first_device(self) -> str:
+        if self.device and self.device in self.devices():
+            return self.device
         devices = self.devices()
         if not devices:
             raise RuntimeError(
