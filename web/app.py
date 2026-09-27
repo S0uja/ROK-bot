@@ -42,15 +42,33 @@ def _resource_ocr(image: np.ndarray) -> dict:
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
-    text = pytesseract.image_to_string(
-        gray,
-        config="--psm 7 -c tessedit_char_whitelist=0123456789.,KMBT+",
-    ).strip()
+
+    try:
+        text = pytesseract.image_to_string(
+            gray,
+            config="--psm 7 -c tessedit_char_whitelist=0123456789.,KMBT+",
+        ).strip()
+    except Exception as exc:
+        # OCR is optional. A missing Tesseract executable must not make the
+        # whole dashboard appear offline.
+        return {
+            "values": {},
+            "raw": "",
+            "available": False,
+            "error": str(exc),
+        }
+
     values = re.findall(r"\d[\d,.]*\s*[KMBT]?", text, flags=re.I)
     parsed = {}
     for i, value in enumerate(values[:5]):
         parsed[RESOURCE_NAMES[i]] = value.replace(" ", "")
-    return {"values": parsed, "raw": text}
+
+    return {
+        "values": parsed,
+        "raw": text,
+        "available": True,
+        "error": None,
+    }
 
 
 @app.get("/")
@@ -91,4 +109,8 @@ def status():
 @app.get("/api/screenshot")
 def screenshot():
     data = screen.capture_bytes()
-    return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-store"})
+    return Response(
+        content=data,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
