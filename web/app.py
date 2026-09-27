@@ -180,7 +180,7 @@ def screenshot():
         slot_half = max(70, round(region.pixels(w, h)[2] - region.pixels(w, h)[0]) * 0.085)
         sx1 = max(rx1, center_x - slot_half)
         sx2 = min(rx2, center_x + slot_half)
-        cv2.rectangle(image, (int(sx1), ry1), (int(sx2), ry2), (255, 180, 0), 2)
+        cv2.rectangle(image, (int(sx1), ry1), (int(sx2), ry2), (0, 140, 255), 2)
 
         box = resources.boxes.get(name) if resources.boxes else None
         if box:
