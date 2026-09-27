@@ -41,6 +41,15 @@ def _resources_for(image):
     _resource_cache_capture_time = capture_time
     return result
 
+def _format_resource_value(value: str | None) -> str:
+    """Format plain numeric counters like RoK displays them (92 658)."""
+    if not value:
+        return "—"
+    token = str(value).strip()
+    if re.fullmatch(r"\d{4,}", token):
+        return f"{int(token):,}".replace(",", " ")
+    return token
+
 def _device():
     try:
         return adb.select_first_device()
@@ -217,7 +226,7 @@ def screenshot():
             by1 += ry1
             by2 += ry1
             cv2.rectangle(image, (bx1 - 5, by1 - 5), (bx2 + 5, by2 + 5), (0, 255, 0), 3)
-            label = f"{name}: {resources.values.get(name, '—')}"
+            label = f"{name}: {_format_resource_value(resources.values.get(name))}"
             cv2.putText(
                 image, label, (bx1, max(24, by1 - 10)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2, cv2.LINE_AA,
