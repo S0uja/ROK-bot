@@ -36,7 +36,7 @@ class ResourceDetector:
         token=raw.strip().replace(" ","").replace("%","K")
         token=re.sub(r"[^0-9.,KMBTkmbt]","",token)
         if not re.fullmatch(r"\d[\d.,]*[KMBT]?",token,re.I): return None
-        if len(re.sub(r"[^0-9]","",token))<3: return None
+        if len(re.sub(r"[^0-9]","",token))<2: return None
         return token
     def _assign_candidates(self, candidates: list[dict]) -> dict[str, str]:
         """Assign OCR tokens to calibrated resource anchors."""
@@ -86,8 +86,29 @@ class ResourceDetector:
                 conf=float(data["conf"][i])
                 cx=(data["left"][i]+data["width"][i]/2)/scale
                 cy=(data["top"][i]+data["height"][i]/2)/scale
-                found.append({"value":token,"x":round(cx,1),"y":round(cy,1),"confidence":round(conf,1)})
+                found.append({
+                    "value": token,
+                    "x": round(cx,1),
+                    "y": round(cy,1),
+                    "confidence": round(conf,1),
+                })
             found.sort(key=lambda x:x["x"])
+
+            # RoK may render large values with a visual space, e.g. "88 058"
+            # or "4 329". Merge nearby numeric OCR fragments on the same row.
+            merged=[]
+            for item in found:
+                if merged:
+                    prev=merged[-1]
+                    gap=item["x"] - prev["x"]
+                    same_row=abs(item["y"] - prev["y"]) <= 18
+                    if same_row and gap <= 55 and len(prev["value"]) <= 3:
+                        prev["value"] += item["value"]
+                        prev["x"] = round((prev["x"] + item["x"]) / 2, 1)
+                        prev["confidence"] = min(prev["confidence"], item["confidence"])
+                        continue
+                merged.append(item)
+            found=merged
             self._resource_width = crop.shape[1] / scale
             values = self._assign_candidates(found)
             return ResourceDetection(
