@@ -246,10 +246,8 @@ async function runResourceSearch(){
   result.textContent="Выполняю поиск: "+resource+" L"+level+"...";
   document.querySelectorAll("[data-task],#searchResource").forEach(b=>b.disabled=true);
   try{
-    const r=await fetch("/api/bot/tasks/search_resource",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({resource,level})
+    const r=await fetch("/api/bot/tasks/search_resource?resource="+encodeURIComponent(resource)+"&level="+level,{
+      method:"POST"
     });
     const raw=await r.text();
     let d;
