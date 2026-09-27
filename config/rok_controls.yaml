@@ -11,9 +11,10 @@ controls:
     menu:       {x: 0.968750, y: 0.929988}
 
   left:
-    tasks:      {x: 0.028, y: 0.280}
-    map:        {x: 0.034, y: 0.858}
-    hammer:     {x: 0.036, y: 0.705}
+    tasks:            {x: 0.028, y: 0.280}
+    city_map_toggle:  {x: 0.034, y: 0.858}
+    map:              {x: 0.034, y: 0.858}
+    hammer:           {x: 0.036, y: 0.705}
 
   right:
     character:  {x: 0.947, y: 0.247}
