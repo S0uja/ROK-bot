@@ -23,6 +23,9 @@ class ResourceDetector:
     def __init__(self,regions:UIRegions|None=None)->None:
         self.regions=regions or UIRegions()
         self._configure_tesseract()
+        self._stable_values: dict[str, str] = {}
+        self._pending_values: dict[str, str] = {}
+        self._pending_counts: dict[str, int] = {}
     @staticmethod
     def _configure_tesseract():
         for p in (Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),Path.home()/"AppData/Local/Programs/Tesseract-OCR/tesseract.exe"):
@@ -175,7 +178,7 @@ class ResourceDetector:
                         continue
                 merged.append(item)
             found=merged
-            values = {}
+            detected = {}
             anchors = self.regions.anchors("resources")
             for name in RESOURCE_NAMES:
                 anchor = anchors.get(name)
@@ -183,7 +186,28 @@ class ResourceDetector:
                     continue
                 result = self._read_anchor(crop, anchor)
                 if result is not None:
-                    values[name] = result["value"]
+                    detected[name] = result["value"]
+
+            # OCR can fluctuate from frame to frame. Require two consecutive
+            # observations before accepting a changed value, while retaining
+            # the last good value during a transient OCR miss.
+            values = dict(self._stable_values)
+            for name, candidate in detected.items():
+                if candidate == self._stable_values.get(name):
+                    self._pending_values.pop(name, None)
+                    self._pending_counts.pop(name, None)
+                    continue
+                if candidate == self._pending_values.get(name):
+                    self._pending_counts[name] = self._pending_counts.get(name, 0) + 1
+                else:
+                    self._pending_values[name] = candidate
+                    self._pending_counts[name] = 1
+                if self._pending_counts[name] >= 2:
+                    self._stable_values[name] = candidate
+                    values[name] = candidate
+                    self._pending_values.pop(name, None)
+                    self._pending_counts.pop(name, None)
+
             return ResourceDetection(
                 values,
                 " ".join(x["value"] for x in found),
