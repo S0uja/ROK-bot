@@ -14,6 +14,7 @@ controls:
     tasks:            {x: 0.028, y: 0.280}
     city_map_toggle:  {x: 0.034, y: 0.858}
     map:              {x: 0.034, y: 0.858}
+    resource_search:  {x: 0.033203, y: 0.700117}
     hammer:           {x: 0.036, y: 0.705}
 
   right:
