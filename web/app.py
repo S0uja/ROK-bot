@@ -56,6 +56,13 @@ def resource_calibration():
         "slot_width": max(70, round((rx2 - rx1) * 0.085)) * 2,
         "anchors": resource_detector.regions.anchors("resources"),
         "values": resource_detector.detect(image).values,
+        "detected_boxes": {
+            name: [
+                box[0] + rx1, box[1] + ry1,
+                box[2] + rx1, box[3] + ry1
+            ]
+            for name, box in (resource_detector.detect(image).boxes or {}).items()
+        },
     }
 
 @app.get("/api/resources/calibration/defaults")
