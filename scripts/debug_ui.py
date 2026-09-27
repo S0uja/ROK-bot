@@ -9,6 +9,7 @@ import cv2
 
 from rokbot.core.adb import ADBClient
 from rokbot.core.config import load_settings
+from rokbot.core.config import load_settings
 from rokbot.core.screen import Screen
 from rokbot.vision.ui_regions import UIRegions
 
