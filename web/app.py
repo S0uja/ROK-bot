@@ -37,20 +37,38 @@ def _device():
 
 
 def _resource_ocr(image: np.ndarray) -> dict:
-    h, w = image.shape[:2]
-    crop = image[0:int(h * 0.075), int(w * 0.55):w]
-    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    """Read the five resource counters from the top-right RoK resource bar.
+
+    RoK places an icon + number in each counter. Reading the whole bar with
+    psm 7 is unreliable because the icons break the text line, so we use
+    Tesseract word boxes and map numeric tokens to calibrated normalized
+    X positions.
+    """
+    height, width = image.shape[:2]
+
+    # The calibrated resources region starts around x=.56. Extend the height
+    # slightly because the resource counters sit below the very top edge.
+    x1 = round(width * 0.55)
+    x2 = width
+    y1 = 0
+    y2 = round(height * 0.13)
+    crop = image[y1:y2, x1:x2]
+
+    anchors = {
+        "food": 0.694,
+        "wood": 0.781,
+        "stone": 0.852,
+        "gold": 0.932,
+        "gems": 0.988,
+    }
 
     try:
-        text = pytesseract.image_to_string(
-            gray,
-            config="--psm 7 -c tessedit_char_whitelist=0123456789.,KMBT+",
-        ).strip()
+        data = pytesseract.image_to_data(
+            crop,
+            config="--psm 11 -c tessedit_char_whitelist=0123456789.,KMBT",
+            output_type=pytesseract.Output.DICT,
+        )
     except Exception as exc:
-        # OCR is optional. A missing Tesseract executable must not make the
-        # whole dashboard appear offline.
         return {
             "values": {},
             "raw": "",
@@ -58,14 +76,75 @@ def _resource_ocr(image: np.ndarray) -> dict:
             "error": str(exc),
         }
 
-    values = re.findall(r"\d[\d,.]*\s*[KMBT]?", text, flags=re.I)
-    parsed = {}
-    for i, value in enumerate(values[:5]):
-        parsed[RESOURCE_NAMES[i]] = value.replace(" ", "")
+    candidates = []
+    raw_parts = []
+
+    for i, raw in enumerate(data.get("text", [])):
+        token = raw.strip()
+        if not token:
+            continue
+
+        # OCR sometimes reads K as a visually similar character or drops it.
+        token = token.replace("%", "K").replace(" ", "")
+        match = re.fullmatch(r"\d[\d.,]*[KMBT]?", token, flags=re.I)
+        if not match:
+            continue
+
+        # Avoid tiny OCR fragments; resource counters are normally at least
+        # three digits in the current account.
+        digits = re.sub(r"[^0-9]", "", token)
+        if len(digits) < 3:
+            continue
+
+        center_x = (
+            x1 + data["left"][i] + data["width"][i] / 2
+        ) / width
+        center_y = (
+            data["top"][i] + data["height"][i] / 2
+        ) / height
+
+        if center_y > 0.11:
+            continue
+
+        confidence = float(data["conf"][i])
+        candidates.append(
+            {
+                "value": token,
+                "x": center_x,
+                "confidence": confidence,
+            }
+        )
+        raw_parts.append(token)
+
+    # Assign each OCR token to the nearest known resource position.
+    values = {}
+    used = set()
+    for name, anchor in anchors.items():
+        best_index = None
+        best_score = None
+
+        for i, candidate in enumerate(candidates):
+            if i in used:
+                continue
+
+            distance = abs(candidate["x"] - anchor)
+            if distance > 0.065:
+                continue
+
+            # Position is more important than OCR confidence because RoK's
+            # resource icons can reduce Tesseract's confidence substantially.
+            score = distance * 100 - max(0.0, candidate["confidence"]) * 0.02
+            if best_score is None or score < best_score:
+                best_score = score
+                best_index = i
+
+        if best_index is not None:
+            used.add(best_index)
+            values[name] = candidates[best_index]["value"]
 
     return {
-        "values": parsed,
-        "raw": text,
+        "values": values,
+        "raw": " ".join(raw_parts),
         "available": True,
         "error": None,
     }
