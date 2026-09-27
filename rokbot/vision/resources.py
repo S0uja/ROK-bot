@@ -124,15 +124,16 @@ class ResourceDetector:
             return None
         try:
             from rapidocr import RapidOCR
-            self._rapidocr = RapidOCR(
-                text_score=0.20,
-                min_height=10,
-                width_height_ratio=-1,
-                max_side_len=3000,
-                min_side_len=10,
-                det_thresh=0.20,
-                det_box_thresh=0.20,
-            )
+            self._rapidocr = RapidOCR(params={
+                "Global.text_score": 0.20,
+                "Global.min_height": 10,
+                "Global.width_height_ratio": -1,
+                "Global.max_side_len": 3000,
+                "Global.min_side_len": 10,
+                "Det.thresh": 0.20,
+                "Det.box_thresh": 0.20,
+                "Global.use_cls": False,
+            })
             return self._rapidocr
         except Exception as exc:
             self._rapidocr_error = str(exc)
@@ -390,77 +391,68 @@ class ResourceDetector:
             h, w = image.shape[:2]
             x1, y1, x2, y2 = self.regions.get("resources").pixels(w, h)
             crop = image[y1:y2, x1:x2]
-            anchors = self.regions.anchors("resources")
 
             detected: dict[str, str] = {}
             boxes: dict[str, tuple[int, int, int, int]] = {}
             candidates: list[dict] = []
 
-            # First frame after dashboard/process startup: scan the entire
-            # resource HUD together so we establish all five counters from
-            # one coherent screenshot. Subsequent refreshes use the faster
-            # per-resource calibrated slots.
-            if not self._startup_scan_done:
-                startup_assigned, startup_candidates = self._startup_scan(crop)
-                self._startup_scan_done = True
-                for name, result in startup_assigned.items():
-                    detected[name] = result["value"]
-                    boxes[name] = tuple(round(v) for v in result["box"])
-                    candidates.append({
-                        "value": result["value"],
-                        "x": round((result["box"][0] + result["box"][2]) / 2, 1),
-                        "y": round((result["box"][1] + result["box"][3]) / 2, 1),
-                        "confidence": result["confidence"],
-                    })
+            # One RapidOCR pass over the complete HUD.
+            assigned, scanned = self._detect_candidates(crop)
+            self._startup_scan_done = True
 
-                # Seed stable values immediately from the coherent startup
-                # scan. This avoids waiting two refreshes to populate the HUD.
+            assigned_ids = {id(result): name for name, result in assigned.items()}
+
+            # Expose every raw OCR detection in the dashboard diagnostics.
+            for result in scanned:
+                item = {
+                    "value": result["value"],
+                    "x": round((result["box"][0] + result["box"][2]) / 2, 1),
+                    "y": round((result["box"][1] + result["box"][3]) / 2, 1),
+                    "confidence": result["confidence"],
+                    "box": [int(v) for v in result["box"]],
+                    "engine": "rapidocr",
+                }
+                resource = assigned_ids.get(id(result))
+                if resource:
+                    item["resource"] = resource
+                candidates.append(item)
+
+            for name, result in assigned.items():
+                detected[name] = result["value"]
+                boxes[name] = tuple(round(v) for v in result["box"])
+
+            # Seed the first coherent full-HUD scan immediately.
+            if not self._stable_values:
                 for name, value in detected.items():
                     self._stable_values[name] = value
                     if name in boxes:
                         self._stable_boxes[name] = boxes[name]
 
-            # Normal fast path after startup: read each calibrated slot.
-            if self._startup_scan_done and not detected:
-                for name in RESOURCE_NAMES:
-                    anchor = anchors.get(name)
-                    if anchor is None:
-                        continue
-                    result = self._read_anchor(crop, anchor)
-                    if result is None:
-                        continue
-                    detected[name] = result["value"]
-                    box = tuple(round(v) for v in result["box"])
-                    boxes[name] = box
-                    candidates.append({
-                        "value": result["value"],
-                        "x": round((box[0] + box[2]) / 2, 1),
-                        "y": round((box[1] + box[3]) / 2, 1),
-                        "confidence": result["confidence"],
-                    })
+            # Only missing counters use the slower targeted Tesseract fallback.
+            anchors = self.regions.anchors("resources")
+            for name in RESOURCE_NAMES:
+                if name in detected:
+                    continue
+                anchor = anchors.get(name)
+                if anchor is None:
+                    continue
 
-            # If startup found at least one resource, also refresh missing
-            # resources individually so a single weak OCR token doesn't make
-            # the rest of the HUD disappear.
-            if self._startup_scan_done:
-                for name in RESOURCE_NAMES:
-                    if name in detected:
-                        continue
-                    anchor = anchors.get(name)
-                    if anchor is None:
-                        continue
-                    result = self._read_anchor(crop, anchor)
-                    if result is None:
-                        continue
-                    detected[name] = result["value"]
-                    box = tuple(round(v) for v in result["box"])
-                    boxes[name] = box
-                    candidates.append({
-                        "value": result["value"],
-                        "x": round((box[0] + box[2]) / 2, 1),
-                        "y": round((box[1] + box[3]) / 2, 1),
-                        "confidence": result["confidence"],
-                    })
+                result = self._read_anchor(crop, anchor)
+                if result is None:
+                    continue
+
+                detected[name] = result["value"]
+                box = tuple(round(v) for v in result["box"])
+                boxes[name] = box
+                candidates.append({
+                    "value": result["value"],
+                    "x": round((box[0] + box[2]) / 2, 1),
+                    "y": round((box[1] + box[3]) / 2, 1),
+                    "confidence": result["confidence"],
+                    "box": [int(v) for v in box],
+                    "resource": name,
+                    "engine": "tesseract_fallback",
+                })
 
             values = dict(self._stable_values)
             for name, candidate in detected.items():
@@ -470,11 +462,13 @@ class ResourceDetector:
                     self._pending_values.pop(name, None)
                     self._pending_counts.pop(name, None)
                     continue
+
                 if candidate == self._pending_values.get(name):
                     self._pending_counts[name] = self._pending_counts.get(name, 0) + 1
                 else:
                     self._pending_values[name] = candidate
                     self._pending_counts[name] = 1
+
                 if self._pending_counts[name] >= 2:
                     self._stable_values[name] = candidate
                     if name in boxes:
@@ -483,12 +477,16 @@ class ResourceDetector:
                     self._pending_values.pop(name, None)
                     self._pending_counts.pop(name, None)
 
+            error = None
+            if self._rapidocr is None and self._rapidocr_error:
+                error = f"RapidOCR unavailable: {self._rapidocr_error}"
+
             return ResourceDetection(
                 values,
                 " ".join(x["value"] for x in candidates),
                 candidates,
                 True,
-                None,
+                error,
                 self._stable_boxes,
             )
 
