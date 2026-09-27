@@ -28,48 +28,58 @@ async function openCalibration(){
   $("calibrationMessage").textContent="Загрузка...";
   const r=await fetch("/api/resources/calibration?t="+Date.now());
   calibrationState=await r.json();
-  $("calibrationImage").src="/api/screenshot?t="+Date.now();
+  $("calibrationImage").src="/api/screenshot/raw?t="+Date.now();
   $("calibrationImage").onload=renderCalibration;
 }
 function renderCalibration(){
   const img=$("calibrationImage"), overlay=$("calibrationOverlay");
   overlay.innerHTML="";
-  const rect=img.getBoundingClientRect();
+  overlay.style.left=img.offsetLeft+"px";
+  overlay.style.top=img.offsetTop+"px";
+  overlay.style.width=img.clientWidth+"px";
+  overlay.style.height=img.clientHeight+"px";
   const scaleX=img.clientWidth/calibrationState.width;
-  const scaleY=img.clientHeight/calibrationState.height;
   names.forEach(name=>{
     const a=calibrationState.anchors[name];
     const slotW=calibrationState.slot_width;
-    const x=a*calibrationState.region_width;
-    const left=x-slotW/2;
+    const left=(a*calibrationState.region_width-slotW/2)*scaleX;
     const box=document.createElement("div");
     box.className="cal-box";
     box.dataset.name=name;
-    box.style.left=(left*scaleX)+"px";
+    box.style.left=left+"px";
     box.style.top="0px";
     box.style.width=(slotW*scaleX)+"px";
-    box.style.height=(calibrationState.region_height*scaleY)+"px";
+    box.style.height=(calibrationState.region_height*(img.clientHeight/calibrationState.height))+"px";
     box.innerHTML='<b>'+labels[name]+'</b><span>'+name+'</span>';
     overlay.appendChild(box);
     makeDraggable(box,name,scaleX);
   });
   $("calibrationValues").innerHTML=names.map(name=>'<div><b>'+labels[name]+'</b><span id="cal-'+name+'">'+(calibrationState.values?.[name]||"—")+'</span></div>').join("");
-  $("calibrationMessage").textContent="Перетащи каждую рамку горизонтально так, чтобы она точно накрывала цифру.";
+  $("calibrationMessage").textContent="Перетащи каждую рамку горизонтально на цифру. После этого нажми «Сохранить».";
 }
 function makeDraggable(box,name,scaleX){
   let startX=0,startAnchor=0;
   box.onpointerdown=e=>{
-    e.preventDefault(); box.setPointerCapture(e.pointerId);
-    startX=e.clientX; startAnchor=calibrationState.anchors[name];
+    e.preventDefault();
+    box.setPointerCapture(e.pointerId);
+    startX=e.clientX;
+    startAnchor=calibrationState.anchors[name];
     box.classList.add("dragging");
-    box.onpointermove=ev=>{
+    const move=ev=>{
       const dx=(ev.clientX-startX)/scaleX;
-      calibrationState.anchors[name]=Math.max(0,Math.min(1.15,startAnchor+dx/calibrationState.region_width));
-      renderCalibration();
-      const again=document.querySelector('.cal-box[data-name="'+name+'"]');
-      again?.setPointerCapture?.(e.pointerId);
+      const next=Math.max(0,Math.min(1.15,startAnchor+dx/calibrationState.region_width));
+      calibrationState.anchors[name]=next;
+      const slotW=calibrationState.slot_width;
+      box.style.left=((next*calibrationState.region_width-slotW/2)*scaleX)+"px";
     };
-    box.onpointerup=()=>{box.classList.remove("dragging");box.onpointermove=null};
+    const up=()=>{
+      box.classList.remove("dragging");
+      box.releasePointerCapture?.(e.pointerId);
+      box.onpointermove=null;
+      box.onpointerup=null;
+    };
+    box.onpointermove=move;
+    box.onpointerup=up;
   };
 }
 async function saveCalibration(){
