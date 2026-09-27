@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
@@ -155,23 +156,36 @@ def status():
     except Exception as exc:
         return {"ok": False, "timestamp": time.time(), "device": device, "error": str(exc)}
 
+def _png_response(data: bytes) -> Response:
+    if not data or not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise HTTPException(status_code=500, detail=f"Invalid PNG screenshot ({len(data)} bytes)")
+    return Response(
+        content=data,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Content-Length": str(len(data)),
+        },
+    )
+
 @app.get("/api/screenshot")
 def screenshot():
     image = screen.capture_cv()
     h, w = image.shape[:2]
     resources = resource_detector.detect(image)
 
-    # Show exactly where the resource OCR is looking.
     region = resource_detector.regions.get("resources")
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
     anchors = resource_detector.regions.anchors("resources")
+    region_w = rx2 - rx1
     for name in ("food", "wood", "stone", "gold", "gems"):
         anchor = anchors.get(name)
         if anchor is None:
             continue
 
-        center_x = rx1 + round(anchor * region.pixels(w, h)[2] - region.pixels(w, h)[0])
-        slot_half = max(70, round(region.pixels(w, h)[2] - region.pixels(w, h)[0]) * 0.085)
+        center_x = rx1 + round(anchor * region_w)
+        slot_half = max(70, round(region_w * 0.085))
         sx1 = max(rx1, center_x - slot_half)
         sx2 = min(rx2, center_x + slot_half)
         cv2.rectangle(image, (int(sx1), ry1), (int(sx2), ry2), (0, 140, 255), 2)
@@ -192,14 +206,20 @@ def screenshot():
 
     ok, encoded = cv2.imencode(".png", image)
     if not ok:
-        return Response(status_code=500)
-    return Response(
-        content=encoded.tobytes(),
-        media_type="image/png",
-        headers={"Cache-Control":"no-store"},
-    )
+        raise HTTPException(status_code=500, detail="OpenCV could not encode screenshot")
+    return _png_response(encoded.tobytes())
 
 @app.get("/api/screenshot/raw")
 def screenshot_raw():
-    data = screen.capture_bytes()
-    return Response(content=data, media_type="image/png", headers={"Cache-Control":"no-store"})
+    return _png_response(screen.capture_bytes())
+
+@app.get("/api/screenshot/diagnostics")
+def screenshot_diagnostics():
+    raw = screen.capture_bytes()
+    image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+    return {
+        "bytes": len(raw),
+        "png_signature": raw[:8].hex(),
+        "decoded": image is not None,
+        "shape": list(image.shape) if image is not None else None,
+    }
