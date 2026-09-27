@@ -3,6 +3,7 @@ const names=["food","wood","stone","gold","gems"];
 const labels={food:"Еда",wood:"Дерево",stone:"Камень",gold:"Золото",gems:"Самоцветы"};
 let calibrationState=null;
 let loading=false;
+let resourceLoading=false;
 
 async function load(){
   if(loading) return;
@@ -25,6 +26,25 @@ async function load(){
     $("state").textContent="ERROR"; $("confidence").textContent=e.message;
   }finally{
     loading=false;
+  }
+}
+
+async function loadResources(){
+  if(resourceLoading) return;
+  resourceLoading=true;
+  try{
+    const r=await fetch("/api/resources?t="+Date.now(),{cache:"no-store"});
+    const d=await r.json();
+    if(!d.ok) throw new Error(d.error||"resource error");
+    const res=d.resources||{};
+    names.forEach(n=>$(n).textContent=res.values?.[n]||"—");
+    $("rawOcr").textContent=res.raw||"—";
+    $("ocrStatus").textContent=res.available===false?"ERROR":((res.detected_count??0)+"/"+(res.expected_count??5));
+    $("resourceDiag").innerHTML=names.map(n=>"<div><span>"+n+"</span><b>"+(res.values?.[n]||"—")+"</b></div>").join("");
+  }catch(e){
+    $("ocrStatus").textContent="ERROR";
+  }finally{
+    resourceLoading=false;
   }
 }
 
@@ -170,7 +190,8 @@ async function resetCalibration(){
   $("calibrationImage").src="/api/screenshot/raw?t="+Date.now();
   $("calibrationImage").onload=renderCalibration;
 }
-$("refresh").onclick=load; setInterval(load,3000);
+$("refresh").onclick=()=>{load();
+loadResources();loadResources()}; setInterval(load,3000); setInterval(loadResources,1000);
 $("openScreen").onclick=()=>{$("modalImg").src="/api/screenshot?t="+Date.now();$("modal").classList.add("show")};
 $("closeModal").onclick=()=>$("modal").classList.remove("show");
 $("modal").onclick=e=>{if(e.target.id==="modal")$("modal").classList.remove("show")};
