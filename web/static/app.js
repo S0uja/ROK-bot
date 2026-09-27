@@ -34,39 +34,62 @@ async function openCalibration(){
 function renderCalibration(){
   const img=$("calibrationImage"), overlay=$("calibrationOverlay"), canvas=$("calibrationCanvas");
   overlay.innerHTML="";
-  const ir=img.getBoundingClientRect();
-  const cr=canvas.getBoundingClientRect();
+  const ir=img.getBoundingClientRect(), cr=canvas.getBoundingClientRect();
   overlay.style.left=(ir.left-cr.left)+"px";
   overlay.style.top=(ir.top-cr.top)+"px";
   overlay.style.width=ir.width+"px";
   overlay.style.height=ir.height+"px";
 
-  const scaleX=ir.width/calibrationState.width;
-  const scaleY=ir.height/calibrationState.height;
+  const sx=ir.width/calibrationState.width;
+  const sy=ir.height/calibrationState.height;
+  const rx=calibrationState.region_x, ry=calibrationState.region_y;
+  const rw=calibrationState.region_width, rh=calibrationState.region_height;
+
+  const regionBox=document.createElement("div");
+  regionBox.className="cal-region";
+  Object.assign(regionBox.style,{left:(rx*sx)+"px",top:(ry*sy)+"px",width:(rw*sx)+"px",height:(rh*sy)+"px"});
+  regionBox.title="Вся область ресурсов";
+  overlay.appendChild(regionBox);
 
   names.forEach(name=>{
     const a=calibrationState.anchors[name];
     const slotW=calibrationState.slot_width;
-    const left=((calibrationState.region_x+a*calibrationState.region_width)-slotW/2)*scaleX;
-    const top=calibrationState.region_y*scaleY;
+    const left=(rx+a*rw-slotW/2)*sx;
+    const slot=document.createElement("div");
+    slot.className="cal-slot";
+    Object.assign(slot.style,{left:left+"px",top:(ry*sy)+"px",width:(slotW*sx)+"px",height:(rh*sy)+"px"});
+    slot.title=labels[name]+" — зона поиска OCR";
+    overlay.appendChild(slot);
+
     const box=document.createElement("div");
     box.className="cal-box";
     box.dataset.name=name;
-    box.style.left=left+"px";
-    box.style.top=top+"px";
-    box.style.width=(slotW*scaleX)+"px";
-    box.style.height=(calibrationState.region_height*scaleY)+"px";
+    Object.assign(box.style,{left:left+"px",top:(ry*sy)+"px",width:(slotW*sx)+"px",height:(rh*sy)+"px"});
     box.innerHTML='<b>'+labels[name]+'</b><span>'+name+'</span>';
     overlay.appendChild(box);
-    makeDraggable(box,name,scaleX);
+    makeDraggable(box,name,sx);
   });
 
+  if(calibrationState.detected_boxes){
+    for(const [name,b] of Object.entries(calibrationState.detected_boxes)){
+      const [x1,y1,x2,y2]=b;
+      const found=document.createElement("div");
+      found.className="cal-found";
+      Object.assign(found.style,{
+        left:(x1*sx)+"px",top:(y1*sy)+"px",
+        width:Math.max(2,(x2-x1)*sx)+"px",height:Math.max(2,(y2-y1)*sy)+"px"
+      });
+      found.innerHTML='<span>'+labels[name]+': '+(calibrationState.values?.[name]||"—")+'</span>';
+      overlay.appendChild(found);
+    }
+  }
+
   const yInput=$("calibrationY");
-  yInput.max=Math.max(0,calibrationState.height-calibrationState.region_height);
-  yInput.value=Math.round(calibrationState.region_y);
-  $("calibrationYValue").textContent=Math.round(calibrationState.region_y)+" px";
+  yInput.max=Math.max(0,calibrationState.height-rh);
+  yInput.value=Math.round(ry);
+  $("calibrationYValue").textContent=Math.round(ry)+" px";
   $("calibrationValues").innerHTML=names.map(name=>'<div><b>'+labels[name]+'</b><span id="cal-'+name+'">'+(calibrationState.values?.[name]||"—")+'</span></div>').join("");
-  $("calibrationMessage").textContent="Y — реальная координата эмулятора. 0 px = самый верх экрана.";
+  $("calibrationMessage").textContent="Жёлтая = область ресурсов · оранжевая = зона OCR · зелёная = реально найденный текст.";
 }
 function makeDraggable(box,name,scaleX){
   let startX=0,startY=0,startAnchor=0,startRegionY=0;
