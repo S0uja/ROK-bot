@@ -428,31 +428,36 @@ class ResourceDetector:
                     if name in boxes:
                         self._stable_boxes[name] = boxes[name]
 
-            # Only missing counters use the slower targeted Tesseract fallback.
+            # Tesseract is deliberately limited to startup / uninitialized
+            # resources. Running several Tesseract variants on every frame can
+            # add multiple seconds to the polling loop when RapidOCR misses a
+            # single tiny counter. Once a resource is known, keep its stable
+            # value until RapidOCR sees a new value.
             anchors = self.regions.anchors("resources")
-            for name in RESOURCE_NAMES:
-                if name in detected:
-                    continue
-                anchor = anchors.get(name)
-                if anchor is None:
-                    continue
+            if not self._startup_scan_done:
+                for name in RESOURCE_NAMES:
+                    if name in detected:
+                        continue
+                    anchor = anchors.get(name)
+                    if anchor is None:
+                        continue
 
-                result = self._read_anchor(crop, anchor)
-                if result is None:
-                    continue
+                    result = self._read_anchor(crop, anchor)
+                    if result is None:
+                        continue
 
-                detected[name] = result["value"]
-                box = tuple(round(v) for v in result["box"])
-                boxes[name] = box
-                candidates.append({
-                    "value": result["value"],
-                    "x": round((box[0] + box[2]) / 2, 1),
-                    "y": round((box[1] + box[3]) / 2, 1),
-                    "confidence": result["confidence"],
-                    "box": [int(v) for v in box],
-                    "resource": name,
-                    "engine": "tesseract_fallback",
-                })
+                    detected[name] = result["value"]
+                    box = tuple(round(v) for v in result["box"])
+                    boxes[name] = box
+                    candidates.append({
+                        "value": result["value"],
+                        "x": round((box[0] + box[2]) / 2, 1),
+                        "y": round((box[1] + box[3]) / 2, 1),
+                        "confidence": result["confidence"],
+                        "box": [int(v) for v in box],
+                        "resource": name,
+                        "engine": "tesseract_fallback",
+                    })
 
             values = dict(self._stable_values)
             for name, candidate in detected.items():
