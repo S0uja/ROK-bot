@@ -28,6 +28,19 @@ screen_detector = ScreenDetector(adb)
 state_detector = ScreenStateDetector()
 resource_detector = ResourceDetector()
 
+_resource_cache: object | None = None
+_resource_cache_capture_time = 0.0
+
+def _resources_for(image):
+    global _resource_cache, _resource_cache_capture_time
+    capture_time = getattr(screen, "_last_capture_time", 0.0)
+    if _resource_cache is not None and capture_time == _resource_cache_capture_time:
+        return _resource_cache
+    result = resource_detector.detect(image)
+    _resource_cache = result
+    _resource_cache_capture_time = capture_time
+    return result
+
 def _device():
     try:
         return adb.select_first_device()
@@ -56,13 +69,13 @@ def resource_calibration():
         "region_width": rx2 - rx1, "region_height": ry2 - ry1,
         "slot_width": max(70, round((rx2 - rx1) * 0.085)) * 2,
         "anchors": resource_detector.regions.anchors("resources"),
-        "values": resource_detector.detect(image).values,
+        "values": _resources_for(image).values,
         "detected_boxes": {
             name: [
                 box[0] + rx1, box[1] + ry1,
                 box[2] + rx1, box[3] + ry1
             ]
-            for name, box in (resource_detector.detect(image).boxes or {}).items()
+            for name, box in (_resources_for(image).boxes or {}).items()
         },
     }
 
@@ -133,7 +146,7 @@ def status():
         h, w = image.shape[:2]
         package = screen_detector.current_package()
         state = state_detector.detect(image)
-        resources = resource_detector.detect(image)
+        resources = _resources_for(image)
         return {
             "ok": True,
             "timestamp": time.time(),
