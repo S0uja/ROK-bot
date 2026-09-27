@@ -251,7 +251,13 @@ async function runResourceSearch(){
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({resource,level})
     });
-    const d=await r.json();
+    const raw=await r.text();
+    let d;
+    try{
+      d=JSON.parse(raw);
+    }catch(e){
+      throw new Error("Сервер вернул не JSON: HTTP "+r.status+" · "+raw.slice(0,160));
+    }
     if(!r.ok) throw new Error(d.detail||d.message||"Ошибка");
     result.textContent=(d.ok?"✅ ":"❌ ")+d.message+(d.state?" · "+d.state:"");
   }catch(e){
