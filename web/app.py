@@ -164,12 +164,6 @@ def screenshot():
     # Show exactly where the resource OCR is looking.
     region = resource_detector.regions.get("resources")
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
-    cv2.rectangle(image, (rx1, ry1), (rx2, ry2), (0, 255, 255), 3)
-    cv2.putText(
-        image, "RESOURCE OCR AREA", (rx1 + 10, max(28, ry1 + 28)),
-        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA,
-    )
-
     anchors = resource_detector.regions.anchors("resources")
     for name in ("food", "wood", "stone", "gold", "gems"):
         anchor = anchors.get(name)
