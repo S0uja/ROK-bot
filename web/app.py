@@ -20,6 +20,7 @@ from rokbot.vision.resources import ResourceDetector
 from rokbot.vision.screen_state import ScreenStateDetector
 from rokbot.tasks.controller import BotController
 from rokbot.tasks.navigation import EnsureCityTask, OpenMapTask
+from rokbot.tasks.resource_search import SearchResourceTask
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "web" / "static"
 
@@ -236,10 +237,15 @@ def bot_status():
 
 
 @app.post("/api/bot/tasks/{task_name}")
-def run_bot_task(task_name: str):
+def run_bot_task(task_name: str, payload: dict | None = None):
+    payload = payload or {}
     tasks = {
         "ensure_city": EnsureCityTask(),
         "open_map": OpenMapTask(),
+        "search_resource": SearchResourceTask(
+            resource=payload.get("resource", "food"),
+            level=payload.get("level", 3),
+        ),
     }
     task = tasks.get(task_name)
     if task is None:
