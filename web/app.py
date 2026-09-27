@@ -161,11 +161,16 @@ def resources():
             "timestamp": time.time(),
             "error": "Resource scan is not ready yet",
         }
+    fast_values = dict(result.values)
+    for item in result.candidates:
+        name = item.get("resource")
+        if name and float(item.get("confidence", 0)) >= 80.0:
+            fast_values[name] = item.get("value")
     return {
         "ok": True,
         "timestamp": time.time(),
         "resources": {
-            "values": result.values,
+            "values": fast_values,
             "raw": result.raw,
             "available": result.available,
             "error": result.error,
