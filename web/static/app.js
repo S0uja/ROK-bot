@@ -12,7 +12,14 @@ async function load(){
     const ev=d.screen?.evidence||{};
     $("evidence").innerHTML=Object.entries(ev).map(([k,v])=>'<div class="ev"><span>'+k+'</span><b>'+Number(v).toFixed(3)+'</b></div><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(v)*100))+'%"></i></div>').join("");
     $("screenshot").src="/api/screenshot?t="+Date.now();
-  }catch(e){$("connectionText").textContent="Нет связи";$("dot").parentElement.classList.remove("ok");$("state").textContent="OFFLINE";$("confidence").textContent=e.message}
+  }catch(e){
+    $("connectionText").textContent="Ошибка данных";
+    $("dot").parentElement.classList.remove("ok");
+    $("state").textContent="ERROR";
+    $("confidence").textContent=e.message;
+    // Keep the live screen visible even if one status detector fails.
+    $("screenshot").src="/api/screenshot?t="+Date.now();
+  }
 }
 $("refresh").onclick=load; setInterval(load,3000);
 $("openScreen").onclick=()=>{$("modalImg").src="/api/screenshot?t="+Date.now();$("modal").classList.add("show")};
