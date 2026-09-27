@@ -211,11 +211,11 @@ def screenshot():
 
 @app.get("/api/screenshot/raw")
 def screenshot_raw():
-    return _png_response(screen.capture_bytes())
+    return _png_response(screen.cached_bytes(max_age=5.0))
 
 @app.get("/api/screenshot/diagnostics")
 def screenshot_diagnostics():
-    raw = screen.capture_bytes()
+    raw = screen.cached_bytes(max_age=5.0)
     image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
     return {
         "bytes": len(raw),
