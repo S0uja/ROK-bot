@@ -12,11 +12,11 @@ regions:
     h: 0.070139
     # Relative X centers inside the calibrated resources region.
     anchors:
-      food: 0.265
-      wood: 0.435
-      stone: 0.600
-      gold: 0.755
-      gems: 0.895
+      food: 0.400
+      wood: 0.580
+      stone: 0.760
+      gold: 0.925
+      gems: 1.020
   left_navigation:
     x: 0.000000
     y: 0.146528
