@@ -27,61 +27,13 @@ class SearchResourceTask:
         self.ensure_map = EnsureMapTask(timeout=timeout)
 
     def _tap(self, ctx: TaskContext, name: str, pause: float = 0.25) -> tuple[int, int]:
-        image = ctx.image
-        h, w = image.shape[:2]
+        w, h = ctx.adb.display_size()
         x, y = self.controls.point(name, w, h)
         ctx.adb.tap(x, y)
         if pause:
             time.sleep(pause)
         return x, y
 
-    def _tap_search_button(self, ctx: TaskContext) -> tuple[int, int]:
-        """Detect the orange SEARCH button in a fresh dialog frame."""
-        import cv2
-        import numpy as np
-
-        image = ctx.screen.capture_cv()
-        ctx.image = image
-        h, w = image.shape[:2]
-
-        # The SEARCH button is in the lower-middle of the resource dialog.
-        # A narrow ROI prevents map markers and HUD icons from being selected.
-        x1, x2 = int(w * 0.28), int(w * 0.46)
-        y1, y2 = int(h * 0.57), int(h * 0.69)
-        roi = image[y1:y2, x1:x2]
-
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(
-            hsv,
-            np.array([3, 90, 100], dtype=np.uint8),
-            np.array([28, 255, 255], dtype=np.uint8),
-        )
-        kernel = np.ones((5, 5), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        candidates = []
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if area < max(300.0, w * h * 0.00002):
-                continue
-            bx, by, bw, bh = cv2.boundingRect(contour)
-            if bw < w * 0.04 or bw < bh * 1.8:
-                continue
-            candidates.append((area, bx, by, bw, bh))
-
-        if candidates:
-            _, bx, by, bw, bh = max(candidates, key=lambda item: item[0])
-            x = x1 + bx + bw // 2
-            y = y1 + by + bh // 2
-        else:
-            # Calibrated fallback if the button color is temporarily obscured.
-            x, y = self.controls.point("resource_search.search", w, h)
-
-        ctx.adb.tap(x, y)
-        time.sleep(0.8)
-        return x, y
 
     def run(self, ctx: TaskContext) -> TaskResult:
         resource = self.resource.lower().strip()
@@ -136,7 +88,7 @@ class SearchResourceTask:
                 ctx, "resource_search.level_plus", pause=0.08
             )
 
-        taps["search"] = self._tap_search_button(ctx)
+        taps["search"] = self._tap(ctx, "resource_search.search", pause=0.8)
         taps["collect"] = self._tap(ctx, "resource_search.collect", pause=0.8)
         taps["new_troops"] = self._tap(ctx, "resource_search.new_troops", pause=0.8)
         taps["march"] = self._tap(ctx, "resource_search.march", pause=0.8)
