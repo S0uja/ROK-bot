@@ -72,6 +72,8 @@ def _resources_for(image):
     _resource_cache_capture_time = capture_time
     return result
 
+_start_resource_worker()
+
 def _format_resource_value(value: str | None) -> str:
     if not value:
         return "—"
@@ -85,8 +87,6 @@ def _device():
         return adb.select_first_device()
     except Exception:
         return None
-
-_start_resource_worker()
 
 @app.get("/")
 def index():
