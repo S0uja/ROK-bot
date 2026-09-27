@@ -26,10 +26,28 @@ async function load(){
 async function openCalibration(){
   $("calibration").classList.add("show");
   $("calibrationMessage").textContent="Загрузка...";
-  const r=await fetch("/api/resources/calibration?t="+Date.now());
-  calibrationState=await r.json();
-  $("calibrationImage").src="/api/screenshot/raw?t="+Date.now();
-  $("calibrationImage").onload=renderCalibration;
+  try{
+    const r=await fetch("/api/resources/calibration?t="+Date.now(),{cache:"no-store"});
+    if(!r.ok) throw new Error("Calibration API HTTP "+r.status);
+    calibrationState=await r.json();
+
+    const img=$("calibrationImage");
+    img.onload=()=>{
+      $("calibrationMessage").textContent="Изображение загружено.";
+      renderCalibration();
+    };
+    img.onerror=()=>{
+      $("calibrationMessage").textContent="❌ Не удалось загрузить screenshot (/api/screenshot/raw).";
+    };
+    img.removeAttribute("src");
+    img.src="/api/screenshot/raw?t="+Date.now();
+
+    if(img.complete && img.naturalWidth>0){
+      renderCalibration();
+    }
+  }catch(e){
+    $("calibrationMessage").textContent="❌ "+e.message;
+  }
 }
 function renderCalibration(){
   const img=$("calibrationImage"), overlay=$("calibrationOverlay"), canvas=$("calibrationCanvas");
