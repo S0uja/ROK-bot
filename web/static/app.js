@@ -190,8 +190,7 @@ async function resetCalibration(){
   $("calibrationImage").src="/api/screenshot/raw?t="+Date.now();
   $("calibrationImage").onload=renderCalibration;
 }
-$("refresh").onclick=()=>{load();
-loadResources();loadResources()}; setInterval(load,3000); setInterval(loadResources,1000);
+$("refresh").onclick=()=>{load();loadResources()}; setInterval(load,3000); setInterval(loadResources,1000);
 $("openScreen").onclick=()=>{$("modalImg").src="/api/screenshot?t="+Date.now();$("modal").classList.add("show")};
 $("closeModal").onclick=()=>$("modal").classList.remove("show");
 $("modal").onclick=e=>{if(e.target.id==="modal")$("modal").classList.remove("show")};
@@ -205,3 +204,4 @@ $("calibrationY").oninput=()=>{
 $("saveCalibration").onclick=saveCalibration; $("resetCalibration").onclick=resetCalibration;
 window.addEventListener("resize",()=>{if($("calibration").classList.contains("show"))renderCalibration()});
 load();
+loadResources();
