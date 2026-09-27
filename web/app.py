@@ -43,7 +43,6 @@ def _resources_for(image):
     return result
 
 def _format_resource_value(value: str | None) -> str:
-    """Format plain numeric counters like RoK displays them (92 658)."""
     if not value:
         return "—"
     token = str(value).strip()
@@ -97,6 +96,7 @@ def resource_calibration_defaults():
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
     try:
         emulator_w, emulator_h = adb.display_size()
+        emulator_h = emulator_h
     except Exception:
         emulator_w, emulator_h = w, h
     return {
@@ -146,6 +146,7 @@ def save_resource_calibration(payload: dict):
     resource_detector._pending_values.clear()
     resource_detector._pending_counts.clear()
     resource_detector._stable_boxes.clear()
+    resource_detector._startup_scan_done = False
     global _resource_cache, _resource_cache_capture_time
     _resource_cache = None
     _resource_cache_capture_time = 0.0
@@ -212,7 +213,6 @@ def screenshot():
         anchor = anchors.get(name)
         if anchor is None:
             continue
-
         center_x = rx1 + round(anchor * region_w)
         slot_half = max(70, round(region_w * 0.085))
         sx1 = max(rx1, center_x - slot_half)
