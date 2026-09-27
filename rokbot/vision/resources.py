@@ -185,7 +185,14 @@ class ResourceDetector:
             return None
 
     def _scan_rapidocr(self, crop: np.ndarray) -> list[dict]:
-        """Recognize the five calibrated resource slots without text detection."""
+        """Recognize each calibrated resource counter independently.
+
+        Recognition-only RapidOCR expects an image containing a text line.
+        The HUD gives us exact horizontal positions, so each resource gets a
+        small dedicated crop. Keeping the calls independent also preserves
+        the resource -> OCR result mapping and avoids relying on detector
+        boxes, which are unavailable in recognition-only mode.
+        """
         started = time.perf_counter()
         engine = self._get_rapidocr()
         if engine is None:
@@ -194,62 +201,68 @@ class ResourceDetector:
         try:
             h, w = crop.shape[:2]
             anchors = self.regions.anchors("resources")
-            slots: list[np.ndarray] = []
-            slot_boxes: list[tuple[int, int, int, int]] = []
+            candidates: list[dict] = []
 
-            # Keep each input small: the resource number is already localized
-            # by calibration, so there is no reason to OCR the full HUD.
-            half = max(90, int(w * 0.075))
-            y1 = max(0, int(h * 0.02))
-            y2 = min(h, int(h * 0.98))
+            half = max(95, int(w * 0.070))
+            y1 = max(0, int(h * 0.08))
+            y2 = min(h, int(h * 0.78))
 
             for name in RESOURCE_NAMES:
                 anchor = anchors.get(name)
                 if anchor is None:
                     continue
+
                 center = int(anchor * w)
                 x1 = max(0, center - half)
                 x2 = min(w, center + half)
                 slot = crop[y1:y2, x1:x2]
                 if slot.size == 0:
                     continue
-                slots.append(slot)
-                slot_boxes.append((x1, y1, x2, y2))
 
-            if not slots:
-                return []
+                # Recognition-only works on a single text-line image. A
+                # modest upscale improves the tiny HUD digits without
+                # bringing back full-HUD text detection.
+                slot = cv2.resize(
+                    slot,
+                    None,
+                    fx=2.5,
+                    fy=2.5,
+                    interpolation=cv2.INTER_CUBIC,
+                )
 
-            # Recognition-only supports a batch, so the model runs once for
-            # all five counters instead of running text detection five times.
-            result = engine(
-                slots,
-                use_det=False,
-                use_cls=False,
-                use_rec=True,
-            )
-            txts = getattr(result, "txts", None)
-            scores = getattr(result, "scores", None)
-            if txts is None or scores is None:
-                return []
-
-            candidates: list[dict] = []
-            for i, raw in enumerate(txts):
-                token = self._token(str(raw))
-                if not token or i >= len(slot_boxes):
-                    continue
-                try:
-                    confidence = float(scores[i])
-                except (TypeError, ValueError, IndexError):
-                    confidence = 0.0
-                if confidence < 0.20:
+                result = engine(
+                    slot,
+                    use_det=False,
+                    use_cls=False,
+                    use_rec=True,
+                )
+                txts = getattr(result, "txts", None)
+                scores = getattr(result, "scores", None)
+                if not txts:
                     continue
 
-                bx1, by1, bx2, by2 = slot_boxes[i]
-                candidates.append({
-                    "value": token,
-                    "confidence": round(confidence * 100.0, 1),
-                    "box": (bx1, by1, bx2, by2),
-                })
+                for index, raw in enumerate(txts):
+                    token = self._token(str(raw))
+                    if not token:
+                        continue
+
+                    try:
+                        confidence = float(scores[index])
+                    except (TypeError, ValueError, IndexError):
+                        confidence = 0.0
+
+                    if confidence < 0.20:
+                        continue
+
+                    candidates.append({
+                        "value": token,
+                        "confidence": round(confidence * 100.0, 1),
+                        "box": (x1, y1, x2, y2),
+                        "resource": name,
+                    })
+
+                    # One numeric counter per calibrated slot is enough.
+                    break
 
             self._last_rapidocr_ms = (time.perf_counter() - started) * 1000.0
             return candidates
@@ -281,6 +294,15 @@ class ResourceDetector:
         used: set[int] = set()
 
         for name in RESOURCE_NAMES:
+            explicit = [
+                index for index, item in enumerate(candidates)
+                if item.get("resource") == name and index not in used
+            ]
+            if explicit:
+                assigned[name] = candidates[explicit[0]]
+                used.add(explicit[0])
+                continue
+
             anchor = anchors.get(name)
             if anchor is None:
                 continue
