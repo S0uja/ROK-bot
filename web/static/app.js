@@ -7,7 +7,7 @@ async function load(){
     $("dot").parentElement.classList.add("ok"); $("connectionText").textContent="Подключено";
     $("state").textContent=d.screen?.state||"—"; $("confidence").textContent="confidence "+(d.screen?.confidence??0);
     $("device").textContent=d.device||"—"; $("resolution").textContent=d.resolution?d.resolution.width+" × "+d.resolution.height:"—"; $("package").textContent=d.package||"—";
-    names.forEach(n=>$(n).textContent=d.resources?.values?.[n]||"—"); $("rawOcr").textContent=d.resources?.raw||"—";
+    names.forEach(n=>$(n).textContent=d.resources?.values?.[n]||"—"); const res=d.resources||{}; $("rawOcr").textContent=res.raw||"—"; $("ocrStatus").textContent=res.available===false?"ERROR":((res.detected_count??0)+"/"+(res.expected_count??5)); $("resourceDiag").innerHTML=names.map(n=>"<div><span>"+n+"</span><b>"+(res.values?.[n]||"—")+"</b></div>").join("");
     $("updated").textContent="Обновлено "+new Date(d.timestamp*1000).toLocaleTimeString();
     const ev=d.screen?.evidence||{};
     $("evidence").innerHTML=Object.entries(ev).map(([k,v])=>'<div class="ev"><span>'+k+'</span><b>'+Number(v).toFixed(3)+'</b></div><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(v)*100))+'%"></i></div>').join("");
