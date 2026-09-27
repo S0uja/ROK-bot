@@ -7,7 +7,7 @@ from rokbot.vision.controls import ROKControls
 
 
 class SearchResourceTask:
-    """Open the map resource search dialog and start a resource search.
+    """Search a resource, collect it, and send a new troop march.
 
     This is deliberately coordinate-driven: the RoK search dialog is a fixed
     UI flow on the calibrated emulator, so there is no need to detect map
@@ -66,6 +66,8 @@ class SearchResourceTask:
 
         taps["search"] = self._tap(ctx, "resource_search.search", pause=0.8)
         taps["collect"] = self._tap(ctx, "resource_search.collect", pause=0.8)
+        taps["new_troops"] = self._tap(ctx, "resource_search.new_troops", pause=0.8)
+        taps["march"] = self._tap(ctx, "resource_search.march", pause=0.8)
 
         return TaskResult(
             True,
