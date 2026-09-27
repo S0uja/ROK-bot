@@ -1,5 +1,5 @@
-# Semantic controls manually calibrated from the full 2048x857 screenshot.
-# Source UI is 3440x1440; normalized coordinates keep the targets resolution-independent.
+# Semantic controls calibrated from the 2048x857 RoK screenshots.
+# Coordinates are normalized to keep the targets resolution-independent.
 
 controls:
   bottom:
@@ -19,3 +19,12 @@ controls:
 
   right:
     character:  {x: 0.947, y: 0.247}
+
+  resource_search:
+    food:       {x: 0.362481, y: 0.821}
+    wood:       {x: 0.464094, y: 0.821}
+    stone:      {x: 0.568637, y: 0.821}
+    gold:       {x: 0.668295, y: 0.821}
+    level_minus:{x: 0.284319, y: 0.541860}
+    level_plus: {x: 0.436737, y: 0.541860}
+    search:     {x: 0.361505, y: 0.630233}
