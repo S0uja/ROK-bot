@@ -5,9 +5,10 @@ from pathlib import Path
 
 import cv2
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+import yaml
 
 from rokbot.core.adb import ADBClient
 from rokbot.core.screen import Screen
@@ -35,6 +36,61 @@ def _device():
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
+
+@app.get("/api/resources/calibration")
+def resource_calibration():
+    image = screen.capture_cv()
+    h, w = image.shape[:2]
+    region = resource_detector.regions.get("resources")
+    rx1, ry1, rx2, ry2 = region.pixels(w, h)
+    return {
+        "width": w, "height": h,
+        "region_width": rx2 - rx1, "region_height": ry2 - ry1,
+        "slot_width": max(70, round((rx2 - rx1) * 0.085)) * 2,
+        "anchors": resource_detector.regions.anchors("resources"),
+        "values": resource_detector.detect(image).values,
+    }
+
+@app.get("/api/resources/calibration/defaults")
+def resource_calibration_defaults():
+    image = screen.capture_cv()
+    h, w = image.shape[:2]
+    region = resource_detector.regions.get("resources")
+    rx1, ry1, rx2, ry2 = region.pixels(w, h)
+    return {
+        "width": w, "height": h,
+        "region_width": rx2 - rx1, "region_height": ry2 - ry1,
+        "slot_width": max(70, round((rx2 - rx1) * 0.085)) * 2,
+        "anchors": {"food":0.260,"wood":0.405,"stone":0.570,"gold":0.725,"gems":0.870},
+        "values": resource_detector.detect(image).values,
+    }
+
+@app.post("/api/resources/calibration")
+def save_resource_calibration(payload: dict):
+    anchors = payload.get("anchors")
+    allowed = {"food","wood","stone","gold","gems"}
+    if not isinstance(anchors, dict) or set(anchors) != allowed:
+        raise HTTPException(status_code=400, detail="invalid anchors")
+    clean = {}
+    for name in allowed:
+        try:
+            value = float(anchors[name])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"invalid anchor: {name}")
+        if not 0 <= value <= 1.15:
+            raise HTTPException(status_code=400, detail=f"anchor out of range: {name}")
+        clean[name] = round(value, 6)
+
+    config_path = ROOT / "config" / "rok_ui.yaml"
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    data.setdefault("regions", {}).setdefault("resources", {})["anchors"] = clean
+    config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+    resource_detector.regions = __import__("rokbot.vision.ui_regions", fromlist=["UIRegions"]).UIRegions()
+    resource_detector._stable_values.clear()
+    resource_detector._pending_values.clear()
+    resource_detector._pending_counts.clear()
+    return {"ok": True, "anchors": clean}
 
 @app.get("/api/status")
 def status():
