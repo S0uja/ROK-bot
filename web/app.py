@@ -153,25 +153,28 @@ def save_resource_calibration(payload: dict):
 
 @app.get("/api/resources")
 def resources():
-    try:
-        image = screen.capture_cv()
-        result = _resources_for(image)
+    """Return the latest resource OCR result without starting another ADB capture."""
+    result = _resource_cache
+    if result is None:
         return {
-            "ok": True,
+            "ok": False,
             "timestamp": time.time(),
-            "resources": {
-                "values": result.values,
-                "raw": result.raw,
-                "available": result.available,
-                "error": result.error,
-                "candidates": result.candidates,
-                "boxes": result.boxes or {},
-                "detected_count": len(result.values),
-                "expected_count": 5,
-            },
+            "error": "Resource scan is not ready yet",
         }
-    except Exception as exc:
-        return {"ok": False, "timestamp": time.time(), "error": str(exc)}
+    return {
+        "ok": True,
+        "timestamp": time.time(),
+        "resources": {
+            "values": result.values,
+            "raw": result.raw,
+            "available": result.available,
+            "error": result.error,
+            "candidates": result.candidates,
+            "boxes": result.boxes or {},
+            "detected_count": len(result.values),
+            "expected_count": 5,
+        },
+    }
 
 @app.get("/api/status")
 def status():
