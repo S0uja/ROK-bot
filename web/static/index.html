@@ -7,14 +7,12 @@
 <body>
 <aside class="sidebar">
 <div class="brand"><span class="logo">⚔</span><div><b>RoK Bot</b><small>Control Center</small></div></div>
-<nav>
-<button class="nav active">Обзор</button><button class="nav">Ресурсы</button><button class="nav">Экран</button><button class="nav">Задачи</button><button class="nav">Логи</button>
-</nav>
+<nav><button class="nav active">Обзор</button><button class="nav">Ресурсы</button><button class="nav">Экран</button><button class="nav">Задачи</button><button class="nav">Логи</button></nav>
 <div class="connection"><i id="dot"></i><span id="connectionText">Проверка...</span></div>
 </aside>
 <main>
 <header><div><h1>Обзор</h1><p>Мониторинг LDPlayer и состояния Rise of Kingdoms</p></div>
-<div class="header-actions"><span id="updated">—</span><button id="refresh" class="primary">Обновить</button></div></header>
+<div class="header-actions"><span id="updated">—</span><button id="refresh" class="primary">Обновить</button><button id="calibrate" class="primary">⚙ Настроить OCR</button></div></header>
 <section class="grid stats">
 <article class="card stat"><span>Состояние игры</span><strong id="state">—</strong><small id="confidence">—</small></article>
 <article class="card stat"><span>Устройство</span><strong id="device">—</strong><small>ADB</small></article>
@@ -34,5 +32,27 @@
 </section>
 </main>
 <div id="modal" class="modal"><div class="modal-inner"><button id="closeModal">×</button><img id="modalImg"></div></div>
+
+<div id="calibration" class="calibration">
+  <div class="calibration-panel">
+    <div class="calibration-head">
+      <div><h2>Ручная настройка OCR ресурсов</h2><p>Перетаскивай рамку каждого ресурса прямо на его число.</p></div>
+      <button id="closeCalibration">×</button>
+    </div>
+    <div class="calibration-toolbar">
+      <span>🟨 жёлтая — вся область ресурсов</span>
+      <span>🟧 оранжевая — зона поиска</span>
+      <span>🟩 зелёная — найденный текст</span>
+      <button id="saveCalibration" class="primary">Сохранить</button>
+      <button id="resetCalibration">Сбросить</button>
+    </div>
+    <div id="calibrationCanvas" class="calibration-canvas">
+      <img id="calibrationImage">
+      <div id="calibrationOverlay"></div>
+    </div>
+    <div class="calibration-values" id="calibrationValues"></div>
+    <div id="calibrationMessage" class="calibration-message"></div>
+  </div>
+</div>
 <script src="/static/app.js"></script>
 </body></html>
