@@ -43,8 +43,13 @@ def resource_calibration():
     h, w = image.shape[:2]
     region = resource_detector.regions.get("resources")
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
+    try:
+        emulator_w, emulator_h = adb.display_size()
+    except Exception:
+        emulator_w, emulator_h = w, h
     return {
-        "width": w, "height": h,
+        "width": emulator_w, "height": emulator_h,
+        "capture_width": w, "capture_height": h,
         "region_x": rx1, "region_y": ry1,
         "region_y_norm": region.y,
         "region_width": rx2 - rx1, "region_height": ry2 - ry1,
@@ -59,8 +64,13 @@ def resource_calibration_defaults():
     h, w = image.shape[:2]
     region = resource_detector.regions.get("resources")
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
+    try:
+        emulator_w, emulator_h = adb.display_size()
+    except Exception:
+        emulator_w, emulator_h = w, h
     return {
-        "width": w, "height": h,
+        "width": emulator_w, "height": emulator_h,
+        "capture_width": w, "capture_height": h,
         "region_x": rx1, "region_y": ry1,
         "region_y_norm": region.y,
         "region_width": rx2 - rx1, "region_height": ry2 - ry1,
