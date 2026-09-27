@@ -20,18 +20,42 @@ class EnsureCityTask:
             return TaskResult(True, self.name, "Already in city", state.state.value, {"confidence": state.confidence})
 
         if state.state != ScreenState.MAP:
-            return TaskResult(False, self.name, "Cannot navigate: screen is not CITY or MAP", state.state.value, {"confidence": state.confidence})
+            return TaskResult(
+                False,
+                self.name,
+                "Cannot navigate: screen is not CITY or MAP",
+                state.state.value,
+                {"confidence": state.confidence, "details": state.details},
+            )
 
-        # Android BACK returns from the world map to the city in the current UI.
-        ctx.adb.shell("input", "keyevent", "KEYCODE_BACK")
+        # RoK uses the same lower-left city/map toggle in both directions.
+        # Android BACK is intentionally not used here because it is a generic
+        # navigation action and may leave the game screen instead.
+        image = ctx.image
+        h, w = image.shape[:2]
+        x, y = self.controls.point("left.city_map_toggle", w, h)
+        ctx.adb.tap(x, y)
+
         deadline = time.monotonic() + self.timeout
         while time.monotonic() < deadline:
             state = ctx.refresh()
             if state.state == ScreenState.CITY:
-                return TaskResult(True, self.name, "Returned to city", state.state.value, {"confidence": state.confidence})
+                return TaskResult(
+                    True,
+                    self.name,
+                    "Returned to city",
+                    state.state.value,
+                    {"confidence": state.confidence, "tap": [x, y]},
+                )
             time.sleep(0.25)
 
-        return TaskResult(False, self.name, "City did not appear after BACK", state.state.value, {"confidence": state.confidence})
+        return TaskResult(
+            False,
+            self.name,
+            "City did not appear after city/map toggle",
+            state.state.value,
+            {"confidence": state.confidence, "tap": [x, y], "details": state.details},
+        )
 
 
 class OpenMapTask:
@@ -45,19 +69,39 @@ class OpenMapTask:
         state = ctx.refresh()
         if state.state == ScreenState.MAP:
             return TaskResult(True, self.name, "Already on map", state.state.value, {"confidence": state.confidence})
-        if state.state != ScreenState.CITY:
-            return TaskResult(False, self.name, "Cannot open map from UNKNOWN", state.state.value, {"confidence": state.confidence})
 
+        if state.state != ScreenState.CITY:
+            return TaskResult(
+                False,
+                self.name,
+                "Cannot open map from UNKNOWN",
+                state.state.value,
+                {"confidence": state.confidence, "details": state.details},
+            )
+
+        # Same physical button toggles CITY <-> MAP.
         image = ctx.image
         h, w = image.shape[:2]
-        x, y = self.controls.point("left.map", w, h)
+        x, y = self.controls.point("left.city_map_toggle", w, h)
         ctx.adb.tap(x, y)
 
         deadline = time.monotonic() + self.timeout
         while time.monotonic() < deadline:
             state = ctx.refresh()
             if state.state == ScreenState.MAP:
-                return TaskResult(True, self.name, "Map opened", state.state.value, {"confidence": state.confidence, "tap": [x, y]})
+                return TaskResult(
+                    True,
+                    self.name,
+                    "Map opened",
+                    state.state.value,
+                    {"confidence": state.confidence, "tap": [x, y]},
+                )
             time.sleep(0.25)
 
-        return TaskResult(False, self.name, "Map did not appear after tap", state.state.value, {"confidence": state.confidence, "tap": [x, y]})
+        return TaskResult(
+            False,
+            self.name,
+            "Map did not appear after city/map toggle",
+            state.state.value,
+            {"confidence": state.confidence, "tap": [x, y], "details": state.details},
+        )
