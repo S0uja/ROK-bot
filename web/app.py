@@ -18,6 +18,8 @@ from rokbot.core.screen import Screen
 from rokbot.vision.detector import ScreenDetector
 from rokbot.vision.resources import ResourceDetector
 from rokbot.vision.screen_state import ScreenStateDetector
+from rokbot.tasks.controller import BotController
+from rokbot.tasks.navigation import EnsureCityTask, OpenMapTask
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "web" / "static"
 
@@ -29,6 +31,7 @@ screen = Screen(adb)
 screen_detector = ScreenDetector(adb)
 state_detector = ScreenStateDetector()
 resource_detector = ResourceDetector()
+bot_controller = BotController(adb=adb, screen=screen, state_detector=state_detector)
 
 _resource_cache: object | None = None
 _resource_cache_capture_time = 0.0
@@ -226,6 +229,31 @@ def resources():
             "expected_count": 5,
         },
     }
+
+@app.get("/api/bot")
+def bot_status():
+    return {"ok": True, **bot_controller.status()}
+
+
+@app.post("/api/bot/tasks/{task_name}")
+def run_bot_task(task_name: str):
+    tasks = {
+        "ensure_city": EnsureCityTask(),
+        "open_map": OpenMapTask(),
+    }
+    task = tasks.get(task_name)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Unknown task: {task_name}")
+    result = bot_controller.run(task)
+    return {
+        "ok": result.ok,
+        "task": result.task,
+        "message": result.message,
+        "state": result.state,
+        "data": result.data,
+        "controller": bot_controller.status(),
+    }
+
 
 @app.get("/api/status")
 def status():
