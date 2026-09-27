@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import subprocess
+import threading
+import time
 
 import cv2
 import numpy as np
@@ -15,14 +18,31 @@ class Screen:
 
     def __init__(self, adb: ADBClient) -> None:
         self.adb = adb
+        self._capture_lock = threading.Lock()
+        self._last_bytes: bytes | None = None
+        self._last_capture_time = 0.0
 
     def capture_bytes(self) -> bytes:
-        result = __import__("subprocess").run(
-            self.adb._cmd("exec-out", "screencap", "-p"),
-            capture_output=True,
-            check=True,
-        )
-        return result.stdout
+        """Capture one fresh frame from LDPlayer, serializing ADB screencap calls."""
+        with self._capture_lock:
+            result = subprocess.run(
+                self.adb._cmd("exec-out", "screencap", "-p"),
+                capture_output=True,
+                check=True,
+                timeout=15,
+            )
+            data = result.stdout
+            if not data:
+                raise RuntimeError("ADB screencap returned empty output")
+            self._last_bytes = data
+            self._last_capture_time = time.monotonic()
+            return data
+
+    def cached_bytes(self, max_age: float = 5.0) -> bytes:
+        """Return the latest successful frame, refreshing only when necessary."""
+        if self._last_bytes is not None and (time.monotonic() - self._last_capture_time) <= max_age:
+            return self._last_bytes
+        return self.capture_bytes()
 
     def capture(self) -> Image.Image:
         return Image.open(BytesIO(self.capture_bytes())).convert("RGB")
