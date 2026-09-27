@@ -105,25 +105,25 @@ class ResourceDetector:
                     config=f"--psm {psm} -c tessedit_char_whitelist=0123456789.,KMBT",
                     output_type=pytesseract.Output.DICT)
                 for i, raw in enumerate(data.get("text", [])):
-                token = self._token(raw)
-                if not token:
-                    continue
-                try:
-                    conf = float(data["conf"][i])
-                except (TypeError, ValueError):
-                    conf = -1.0
-                candidate = {
-                    "value": token,
-                    "confidence": round(conf, 1),
-                    "box": (
-                        round(x1 + data["left"][i] / scale),
-                        round(data["top"][i] / scale),
-                        round(x1 + (data["left"][i] + data["width"][i]) / scale),
-                        round((data["top"][i] + data["height"][i]) / scale),
-                    ),
-                }
-                if best is None or candidate["confidence"] > best["confidence"]:
-                    best = candidate
+                    token = self._token(raw)
+                    if not token:
+                        continue
+                    try:
+                        conf = float(data["conf"][i])
+                    except (TypeError, ValueError):
+                        conf = -1.0
+                    candidate = {
+                        "value": token,
+                        "confidence": round(conf, 1),
+                        "box": (
+                            round(x1 + data["left"][i] / scale),
+                            round(data["top"][i] / scale),
+                            round(x1 + (data["left"][i] + data["width"][i]) / scale),
+                            round((data["top"][i] + data["height"][i]) / scale),
+                        ),
+                    }
+                    if best is None or candidate["confidence"] > best["confidence"]:
+                        best = candidate
         return best
 
     def detect(self,image:np.ndarray)->ResourceDetection:
