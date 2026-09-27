@@ -42,12 +42,13 @@ function renderCalibration(){
   names.forEach(name=>{
     const a=calibrationState.anchors[name];
     const slotW=calibrationState.slot_width;
-    const left=(a*calibrationState.region_width-slotW/2)*scaleX;
+    const left=((calibrationState.region_x+a*calibrationState.region_width)-slotW/2)*scaleX;
+    const top=calibrationState.region_y*(img.clientHeight/calibrationState.height);
     const box=document.createElement("div");
     box.className="cal-box";
     box.dataset.name=name;
     box.style.left=left+"px";
-    box.style.top="0px";
+    box.style.top=top+"px";
     box.style.width=(slotW*scaleX)+"px";
     box.style.height=(calibrationState.region_height*(img.clientHeight/calibrationState.height))+"px";
     box.innerHTML='<b>'+labels[name]+'</b><span>'+name+'</span>';
@@ -70,7 +71,7 @@ function makeDraggable(box,name,scaleX){
       const next=Math.max(0,Math.min(1.15,startAnchor+dx/calibrationState.region_width));
       calibrationState.anchors[name]=next;
       const slotW=calibrationState.slot_width;
-      box.style.left=((next*calibrationState.region_width-slotW/2)*scaleX)+"px";
+      box.style.left=((calibrationState.region_x+next*calibrationState.region_width-slotW/2)*scaleX)+"px";
     };
     const up=()=>{
       box.classList.remove("dragging");
