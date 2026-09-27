@@ -85,16 +85,26 @@ class ResourceDetector:
         slot = crop[:, x1:x2]
         slot = cv2.resize(slot, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         gray = cv2.cvtColor(slot, cv2.COLOR_BGR2GRAY)
-        variants = [gray, cv2.threshold(gray, 145, 255, cv2.THRESH_BINARY)[1],
-                    cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)[1],
-                    cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                          cv2.THRESH_BINARY, 31, 7)]
+        # Resource numbers are small, bright HUD text. Use several OCR
+        # layouts/preprocessing variants because individual slots can differ
+        # slightly in contrast and icon overlap.
+        variants = [
+            gray,
+            cv2.threshold(gray, 125, 255, cv2.THRESH_BINARY)[1],
+            cv2.threshold(gray, 145, 255, cv2.THRESH_BINARY)[1],
+            cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)[1],
+            cv2.threshold(gray, 205, 255, cv2.THRESH_BINARY)[1],
+            cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                  cv2.THRESH_BINARY, 31, 7),
+        ]
         best = None
         for variant in variants:
-            data = pytesseract.image_to_data(
-                variant, config="--psm 7 -c tessedit_char_whitelist=0123456789.,KMBT",
-                output_type=pytesseract.Output.DICT)
-            for i, raw in enumerate(data.get("text", [])):
+            for psm in (6, 7, 11, 13):
+                data = pytesseract.image_to_data(
+                    variant,
+                    config=f"--psm {psm} -c tessedit_char_whitelist=0123456789.,KMBT",
+                    output_type=pytesseract.Output.DICT)
+                for i, raw in enumerate(data.get("text", [])):
                 token = self._token(raw)
                 if not token:
                     continue
@@ -207,6 +217,8 @@ class ResourceDetector:
             values = dict(self._stable_values)
             for name, candidate in detected.items():
                 if candidate == self._stable_values.get(name):
+                    if name in boxes:
+                        self._stable_boxes[name] = boxes[name]
                     self._pending_values.pop(name, None)
                     self._pending_counts.pop(name, None)
                     continue
