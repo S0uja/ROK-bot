@@ -70,6 +70,38 @@ class ResourceDetector:
 
         return values
 
+    def _read_anchor(self, crop: np.ndarray, anchor: float, scale: int = 4) -> dict | None:
+        """OCR one resource slot around its calibrated horizontal anchor."""
+        h, w = crop.shape[:2]
+        center = int(anchor * w)
+        half = max(70, int(w * 0.085))
+        x1 = max(0, center - half)
+        x2 = min(w, center + half)
+        slot = crop[:, x1:x2]
+        slot = cv2.resize(slot, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        gray = cv2.cvtColor(slot, cv2.COLOR_BGR2GRAY)
+        variants = [gray, cv2.threshold(gray, 145, 255, cv2.THRESH_BINARY)[1],
+                    cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)[1],
+                    cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                          cv2.THRESH_BINARY, 31, 7)]
+        best = None
+        for variant in variants:
+            data = pytesseract.image_to_data(
+                variant, config="--psm 7 -c tessedit_char_whitelist=0123456789.,KMBT",
+                output_type=pytesseract.Output.DICT)
+            for i, raw in enumerate(data.get("text", [])):
+                token = self._token(raw)
+                if not token:
+                    continue
+                try:
+                    conf = float(data["conf"][i])
+                except (TypeError, ValueError):
+                    conf = -1.0
+                candidate = {"value": token, "confidence": round(conf, 1)}
+                if best is None or candidate["confidence"] > best["confidence"]:
+                    best = candidate
+        return best
+
     def detect(self,image:np.ndarray)->ResourceDetection:
         try:
             h,w=image.shape[:2]
@@ -143,8 +175,15 @@ class ResourceDetector:
                         continue
                 merged.append(item)
             found=merged
-            resource_width = crop.shape[1] / scale
-            values = self._assign_candidates(found, resource_width)
+            values = {}
+            anchors = self.regions.anchors("resources")
+            for name in RESOURCE_NAMES:
+                anchor = anchors.get(name)
+                if anchor is None:
+                    continue
+                result = self._read_anchor(crop, anchor)
+                if result is not None:
+                    values[name] = result["value"]
             return ResourceDetection(
                 values,
                 " ".join(x["value"] for x in found),
