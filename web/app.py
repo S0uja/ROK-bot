@@ -62,123 +62,79 @@ def _device():
 
 
 def _resource_ocr(image: np.ndarray) -> dict:
-    """Read the five resource counters from the top-right RoK resource bar.
-
-    RoK places an icon + number in each counter. Reading the whole bar with
-    psm 7 is unreliable because the icons break the text line, so we use
-    Tesseract word boxes and map numeric tokens to calibrated normalized
-    X positions.
-    """
+    """Read each RoK resource counter from its own small crop."""
     height, width = image.shape[:2]
 
-    # The calibrated resources region starts around x=.56. Extend the height
-    # slightly because the resource counters sit below the very top edge.
-    x1 = round(width * 0.55)
-    x2 = width
-    y1 = 0
-    y2 = round(height * 0.13)
-    crop = image[y1:y2, x1:x2]
-
+    # Centers measured from the actual 3440x1440 RoK layout.
     anchors = {
-        "food": 0.694,
-        "wood": 0.781,
-        "stone": 0.852,
-        "gold": 0.932,
-        "gems": 0.988,
+        "food": 0.688,
+        "wood": 0.765,
+        "stone": 0.838,
+        "gold": 0.902,
+        "gems": 0.964,
     }
 
-    try:
-        data = pytesseract.image_to_data(
-            crop,
-            config="--psm 11 -c tessedit_char_whitelist=0123456789.,KMBT",
-            output_type=pytesseract.Output.DICT,
-        )
-    except Exception as exc:
-        return {
-            "values": {},
-            "raw": "",
-            "available": False,
-            "error": str(exc),
-            "candidates": [],
-            "detected_count": 0,
-            "expected_count": len(RESOURCE_NAMES),
-        }
-
+    values = {}
     candidates = []
     raw_parts = []
 
-    for i, raw in enumerate(data.get("text", [])):
-        token = raw.strip()
-        if not token:
-            continue
+    try:
+        for name, center in anchors.items():
+            # Keep the crop tight so neighbouring counters cannot steal a value.
+            x1 = max(0, round(width * (center - 0.032)))
+            x2 = min(width, round(width * (center + 0.032)))
+            y1 = 0
+            y2 = round(height * 0.085)
+            crop = image[y1:y2, x1:x2]
 
-        # OCR sometimes reads K as a visually similar character or drops it.
-        token = token.replace("%", "K").replace(" ", "")
-        match = re.fullmatch(r"\d[\d.,]*[KMBT]?", token, flags=re.I)
-        if not match:
-            continue
+            # Upscale improves recognition of the small resource text.
+            crop = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
-        # Avoid tiny OCR fragments; resource counters are normally at least
-        # three digits in the current account.
-        digits = re.sub(r"[^0-9]", "", token)
-        if len(digits) < 3:
-            continue
+            data = pytesseract.image_to_data(
+                gray,
+                config="--psm 7 -c tessedit_char_whitelist=0123456789.,KMBT",
+                output_type=pytesseract.Output.DICT,
+            )
 
-        center_x = (
-            x1 + data["left"][i] + data["width"][i] / 2
-        ) / width
-        center_y = (
-            data["top"][i] + data["height"][i] / 2
-        ) / height
+            found = []
+            for i, raw in enumerate(data.get("text", [])):
+                token = raw.strip().replace(" ", "").replace("%", "K")
+                token = re.sub(r"[^0-9.,KMBTkmbt]", "", token)
+                if not re.fullmatch(r"\d[\d.,]*[KMBT]?", token, flags=re.I):
+                    continue
+                if len(re.sub(r"[^0-9]", "", token)) < 3:
+                    continue
+                conf = float(data["conf"][i])
+                found.append((conf, token))
 
-        if center_y > 0.11:
-            continue
+            if found:
+                found.sort(key=lambda item: item[0], reverse=True)
+                token = found[0][1]
+                values[name] = token
+                candidates.append({"resource": name, "value": token, "confidence": found[0][0]})
+                raw_parts.append(token)
 
-        confidence = float(data["conf"][i])
-        candidates.append(
-            {
-                "value": token,
-                "x": center_x,
-                "confidence": confidence,
-            }
-        )
-        raw_parts.append(token)
-
-    # Assign each OCR token to the nearest known resource position.
-    values = {}
-    used = set()
-    for name, anchor in anchors.items():
-        best_index = None
-        best_score = None
-
-        for i, candidate in enumerate(candidates):
-            if i in used:
-                continue
-
-            distance = abs(candidate["x"] - anchor)
-            if distance > 0.065:
-                continue
-
-            # Position is more important than OCR confidence because RoK's
-            # resource icons can reduce Tesseract's confidence substantially.
-            score = distance * 100 - max(0.0, candidate["confidence"]) * 0.02
-            if best_score is None or score < best_score:
-                best_score = score
-                best_index = i
-
-        if best_index is not None:
-            used.add(best_index)
-            values[name] = candidates[best_index]["value"]
-
-    return {
-        "values": values,
-        "raw": " ".join(raw_parts),
-        "available": True,
-        "error": None,
-        "candidates": candidates,
-        "detected_count": len(values),
-        "expected_count": len(RESOURCE_NAMES),
-    }
+        return {
+            "values": values,
+            "raw": " ".join(raw_parts),
+            "available": True,
+            "error": None,
+            "candidates": candidates,
+            "detected_count": len(values),
+            "expected_count": len(RESOURCE_NAMES),
+        }
+    except Exception as exc:
+        return {
+            "values": values,
+            "raw": " ".join(raw_parts),
+            "available": False,
+            "error": str(exc),
+            "candidates": candidates,
+            "detected_count": len(values),
+            "expected_count": len(RESOURCE_NAMES),
+        }
 
 
 @app.get("/")
