@@ -38,6 +38,25 @@ class ResourceDetector:
         if not re.fullmatch(r"\d[\d.,]*[KMBT]?",token,re.I): return None
         if len(re.sub(r"[^0-9]","",token))<3: return None
         return token
+    @staticmethod
+    def _assign_candidates(candidates: list[dict], width: float) -> dict[str, str]:
+        """Assign OCR values to resource slots using positions inside the calibrated region."""
+        if not candidates:
+            return {}
+        values: dict[str, str] = {}
+        zones = {
+            name: (index / 5, (index + 1) / 5)
+            for index, name in enumerate(RESOURCE_NAMES)
+        }
+        for name, (left, right) in zones.items():
+            matches = [
+                item for item in candidates
+                if left <= (item["x"] / max(width, 1.0)) < right
+            ]
+            if matches:
+                values[name] = max(matches, key=lambda item: item["confidence"])["value"]
+        return values
+
     def detect(self,image:np.ndarray)->ResourceDetection:
         try:
             h,w=image.shape[:2]
@@ -56,12 +75,14 @@ class ResourceDetector:
                 cy=(data["top"][i]+data["height"][i]/2)/scale
                 found.append({"value":token,"x":round(cx,1),"y":round(cy,1),"confidence":round(conf,1)})
             found.sort(key=lambda x:x["x"])
-            # Resource values form a left-to-right sequence. Do not invent missing values.
-            values={}
-            if len(found)>=5:
-                for name,item in zip(RESOURCE_NAMES,found[:5]): values[name]=item["value"]
-            elif found:
-                for name,item in zip(RESOURCE_NAMES,found): values[name]=item["value"]
-            return ResourceDetection(values," ".join(x["value"] for x in found),found,True,None)
+            crop_width = crop.shape[1] / scale
+            values = self._assign_candidates(found, crop_width)
+            return ResourceDetection(
+                values,
+                " ".join(x["value"] for x in found),
+                found,
+                True,
+                None,
+            )
         except Exception as exc:
             return ResourceDetection({}, "", [], False, str(exc))
