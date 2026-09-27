@@ -53,15 +53,17 @@ class SearchResourceTask:
         taps = {}
         taps["resource_search"] = self._tap(ctx, "left.resource_search")
 
+        # Follow the exact visible UI flow: choose the resource first,
+        # then set the requested level, then press SEARCH.
+        taps["resource"] = self._tap(ctx, f"resource_search.{resource}")
+
         # The dialog opens with a remembered/default level. Reset to level 1
-        # with the minus control, then move to the requested level. This avoids
-        # depending on whatever level was selected during the previous search.
+        # with the minus control, then move to the requested level.
         for _ in range(10):
             taps["level_minus"] = self._tap(ctx, "resource_search.level_minus", pause=0.08)
         for _ in range(self.level - 1):
             taps["level_plus"] = self._tap(ctx, "resource_search.level_plus", pause=0.08)
 
-        taps["resource"] = self._tap(ctx, f"resource_search.{resource}")
         taps["search"] = self._tap(ctx, "resource_search.search", pause=0.5)
 
         return TaskResult(
