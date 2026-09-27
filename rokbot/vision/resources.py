@@ -38,7 +38,7 @@ class ResourceDetector:
         if not re.fullmatch(r"\d[\d.,]*[KMBT]?",token,re.I): return None
         if len(re.sub(r"[^0-9]","",token))<2: return None
         return token
-    def _assign_candidates(self, candidates: list[dict]) -> dict[str, str]:
+    def _assign_candidates(self, candidates: list[dict], width: float) -> dict[str, str]:
         """Assign OCR tokens to calibrated resource anchors."""
         anchors = self.regions.anchors("resources")
         if not anchors:
@@ -57,7 +57,7 @@ class ResourceDetector:
             for index, item in enumerate(candidates):
                 if index in used:
                     continue
-                distance = abs((item["x"] / max(self._resource_width, 1.0)) - anchor)
+                distance = abs((item["x"] / max(width, 1.0)) - anchor)
                 if distance < best_distance:
                     best_distance = distance
                     best_index = index
@@ -109,8 +109,8 @@ class ResourceDetector:
                         continue
                 merged.append(item)
             found=merged
-            self._resource_width = crop.shape[1] / scale
-            values = self._assign_candidates(found)
+            resource_width = crop.shape[1] / scale
+            values = self._assign_candidates(found, resource_width)
             return ResourceDetection(
                 values,
                 " ".join(x["value"] for x in found),
