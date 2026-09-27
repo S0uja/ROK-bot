@@ -151,6 +151,28 @@ def save_resource_calibration(payload: dict):
     _resource_cache_capture_time = 0.0
     return {"ok": True, "anchors": clean, "region_y_norm": region_y_norm}
 
+@app.get("/api/resources")
+def resources():
+    try:
+        image = screen.capture_cv()
+        result = _resources_for(image)
+        return {
+            "ok": True,
+            "timestamp": time.time(),
+            "resources": {
+                "values": result.values,
+                "raw": result.raw,
+                "available": result.available,
+                "error": result.error,
+                "candidates": result.candidates,
+                "boxes": result.boxes or {},
+                "detected_count": len(result.values),
+                "expected_count": 5,
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "timestamp": time.time(), "error": str(exc)}
+
 @app.get("/api/status")
 def status():
     device = _device()
