@@ -38,23 +38,36 @@ class ResourceDetector:
         if not re.fullmatch(r"\d[\d.,]*[KMBT]?",token,re.I): return None
         if len(re.sub(r"[^0-9]","",token))<3: return None
         return token
-    @staticmethod
-    def _assign_candidates(candidates: list[dict], width: float) -> dict[str, str]:
-        """Assign OCR values to resource slots using positions inside the calibrated region."""
-        if not candidates:
+    def _assign_candidates(self, candidates: list[dict]) -> dict[str, str]:
+        """Assign OCR tokens to calibrated resource anchors."""
+        anchors = self.regions.anchors("resources")
+        if not anchors:
             return {}
+
         values: dict[str, str] = {}
-        zones = {
-            name: (index / 5, (index + 1) / 5)
-            for index, name in enumerate(RESOURCE_NAMES)
-        }
-        for name, (left, right) in zones.items():
-            matches = [
-                item for item in candidates
-                if left <= (item["x"] / max(width, 1.0)) < right
-            ]
-            if matches:
-                values[name] = max(matches, key=lambda item: item["confidence"])["value"]
+        used: set[int] = set()
+
+        for name in RESOURCE_NAMES:
+            anchor = anchors.get(name)
+            if anchor is None:
+                continue
+
+            best_index = None
+            best_distance = float("inf")
+            for index, item in enumerate(candidates):
+                if index in used:
+                    continue
+                distance = abs((item["x"] / max(self._resource_width, 1.0)) - anchor)
+                if distance < best_distance:
+                    best_distance = distance
+                    best_index = index
+
+            # Prevent a random OCR token from being assigned to a resource
+            # when it is far away from the calibrated slot.
+            if best_index is not None and best_distance <= 0.12:
+                values[name] = candidates[best_index]["value"]
+                used.add(best_index)
+
         return values
 
     def detect(self,image:np.ndarray)->ResourceDetection:
@@ -75,8 +88,8 @@ class ResourceDetector:
                 cy=(data["top"][i]+data["height"][i]/2)/scale
                 found.append({"value":token,"x":round(cx,1),"y":round(cy,1),"confidence":round(conf,1)})
             found.sort(key=lambda x:x["x"])
-            crop_width = crop.shape[1] / scale
-            values = self._assign_candidates(found, crop_width)
+            self._resource_width = crop.shape[1] / scale
+            values = self._assign_candidates(found)
             return ResourceDetection(
                 values,
                 " ".join(x["value"] for x in found),
