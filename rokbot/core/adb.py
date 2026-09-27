@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from rokbot.core.config import load_settings
+
 
 WINDOWS_ADB_CANDIDATES = (
     Path(r"C:\LDPlayer\LDPlayer9\adb.exe"),
@@ -13,6 +15,10 @@ WINDOWS_ADB_CANDIDATES = (
 
 
 def find_adb() -> str:
+    settings = load_settings()
+    configured_setting = settings.adb_executable
+    if configured_setting and configured_setting.lower() not in {"auto", "adb"} and Path(configured_setting).is_file():
+        return configured_setting
     """Find the ADB binary used by the emulator.
 
     ROK-bot prefers an explicit ROK_ADB_PATH, then LDPlayer's bundled ADB,
