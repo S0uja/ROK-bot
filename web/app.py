@@ -45,6 +45,7 @@ def resource_calibration():
     rx1, ry1, rx2, ry2 = region.pixels(w, h)
     return {
         "width": w, "height": h,
+        "region_x": rx1, "region_y": ry1,
         "region_width": rx2 - rx1, "region_height": ry2 - ry1,
         "slot_width": max(70, round((rx2 - rx1) * 0.085)) * 2,
         "anchors": resource_detector.regions.anchors("resources"),
