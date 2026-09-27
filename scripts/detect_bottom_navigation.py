@@ -8,11 +8,10 @@ import tempfile
 import cv2
 
 from rokbot.core.adb import ADBClient
+from rokbot.core.config import load_settings
 from rokbot.core.screen import Screen
 from rokbot.vision.bottom_navigation import BottomNavigationDetector
 
-
-OUTPUT = Path(__file__).resolve().parents[1] / "screenshots" / "debug" / "bottom_navigation.png"
 
 
 def save_png(image, output: Path) -> Path:
@@ -54,6 +53,7 @@ def main() -> None:
     adb = ADBClient()
     device = adb.select_first_device()
     screen = Screen(adb)
+    settings = load_settings()
     image = screen.capture_cv()
 
     detector = BottomNavigationDetector()
@@ -93,7 +93,7 @@ def main() -> None:
             cv2.LINE_AA,
         )
 
-    saved = save_png(debug, OUTPUT)
+    saved = save_png(debug, settings.screenshot_dir / "debug" / "bottom_navigation.png")
     print(f"Debug image: {saved.resolve()}")
     print(f"File size: {saved.stat().st_size:,} bytes")
 
