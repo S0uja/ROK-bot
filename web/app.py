@@ -237,14 +237,20 @@ def bot_status():
 
 
 @app.post("/api/bot/tasks/{task_name}")
-def run_bot_task(task_name: str, payload: dict | None = None):
-    payload = payload or {}
+def run_bot_task(
+    task_name: str,
+    resource: str = "food",
+    level: int = 3,
+):
+    # Resource/level are query parameters on purpose. This keeps the task
+    # endpoint compatible with the simple dashboard fetch and avoids JSON body
+    # parsing issues for this small command API.
     tasks = {
         "ensure_city": EnsureCityTask(),
         "open_map": OpenMapTask(),
         "search_resource": SearchResourceTask(
-            resource=payload.get("resource", "food"),
-            level=payload.get("level", 3),
+            resource=resource,
+            level=level,
         ),
     }
     task = tasks.get(task_name)
