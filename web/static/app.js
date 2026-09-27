@@ -32,19 +32,24 @@ async function openCalibration(){
     calibrationState=await r.json();
 
     const img=$("calibrationImage");
+    img.width=calibrationState.width;
+    img.height=calibrationState.height;
+    $("calibrationMessage").textContent="Загрузка screenshot...";
+    const response=await fetch("/api/screenshot/raw?t="+Date.now(),{cache:"no-store"});
+    if(!response.ok) throw new Error("Screenshot HTTP "+response.status);
+    const blob=await response.blob();
+    if(!blob.size) throw new Error("Screenshot пустой");
+    const objectUrl=URL.createObjectURL(blob);
     img.onload=()=>{
       $("calibrationMessage").textContent="Изображение загружено.";
       renderCalibration();
+      setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
     };
     img.onerror=()=>{
-      $("calibrationMessage").textContent="❌ Не удалось загрузить screenshot (/api/screenshot/raw).";
+      URL.revokeObjectURL(objectUrl);
+      $("calibrationMessage").textContent="❌ Браузер не смог открыть PNG.";
     };
-    img.removeAttribute("src");
-    img.src="/api/screenshot/raw?t="+Date.now();
-
-    if(img.complete && img.naturalWidth>0){
-      renderCalibration();
-    }
+    img.src=objectUrl;
   }catch(e){
     $("calibrationMessage").textContent="❌ "+e.message;
   }
