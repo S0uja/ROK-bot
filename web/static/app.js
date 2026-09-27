@@ -59,33 +59,40 @@ function renderCalibration(){
   $("calibrationMessage").textContent="Перетащи каждую рамку горизонтально на цифру. После этого нажми «Сохранить».";
 }
 function makeDraggable(box,name,scaleX){
-  let startX=0,startAnchor=0;
+  let startX=0,startY=0,startAnchor=0,startRegionY=0;
   box.onpointerdown=e=>{
     e.preventDefault();
     box.setPointerCapture(e.pointerId);
-    startX=e.clientX;
+    startX=e.clientX; startY=e.clientY;
     startAnchor=calibrationState.anchors[name];
+    startRegionY=calibrationState.region_y;
     box.classList.add("dragging");
     const move=ev=>{
       const dx=(ev.clientX-startX)/scaleX;
+      const dy=(ev.clientY-startY)/(imgScaleY());
       const next=Math.max(0,Math.min(1.15,startAnchor+dx/calibrationState.region_width));
+      const maxY=Math.max(0,calibrationState.height-calibrationState.region_height);
+      const nextY=Math.max(0,Math.min(maxY,startRegionY+dy));
       calibrationState.anchors[name]=next;
-      const slotW=calibrationState.slot_width;
-      box.style.left=((calibrationState.region_x+next*calibrationState.region_width-slotW/2)*scaleX)+"px";
+      calibrationState.region_y=nextY;
+      renderCalibration();
+      const again=document.querySelector('.cal-box[data-name="'+name+'"]');
+      if(again){ again.setPointerCapture?.(e.pointerId); again.classList.add("dragging"); }
     };
     const up=()=>{
-      box.classList.remove("dragging");
-      box.releasePointerCapture?.(e.pointerId);
-      box.onpointermove=null;
-      box.onpointerup=null;
+      document.querySelector('.cal-box[data-name="'+name+'"]')?.classList.remove("dragging");
+      box.onpointermove=null; box.onpointerup=null;
     };
     box.onpointermove=move;
     box.onpointerup=up;
   };
 }
+function imgScaleY(){
+  return $("calibrationImage").clientHeight/calibrationState.height;
+}
 async function saveCalibration(){
   $("calibrationMessage").textContent="Сохраняю...";
-  const r=await fetch("/api/resources/calibration",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({anchors:calibrationState.anchors})});
+  const r=await fetch("/api/resources/calibration",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({anchors:calibrationState.anchors,region_y_norm:calibrationState.region_y/calibrationState.height})});
   const d=await r.json();
   $("calibrationMessage").textContent=d.ok?"✅ Сохранено. OCR использует новые координаты.":"❌ "+(d.error||"Ошибка");
   if(d.ok) setTimeout(load,500);
