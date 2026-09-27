@@ -2,8 +2,11 @@ const $=id=>document.getElementById(id);
 const names=["food","wood","stone","gold","gems"];
 const labels={food:"Еда",wood:"Дерево",stone:"Камень",gold:"Золото",gems:"Самоцветы"};
 let calibrationState=null;
+let loading=false;
 
 async function load(){
+  if(loading) return;
+  loading=true;
   try{
     const r=await fetch("/api/status",{cache:"no-store"}); const d=await r.json();
     if(!d.ok) throw new Error(d.error||"unknown");
@@ -20,6 +23,8 @@ async function load(){
     $("connectionText").textContent="Ошибка данных"; $("dot").parentElement.classList.remove("ok");
     $("state").textContent="ERROR"; $("confidence").textContent=e.message;
     $("screenshot").src="/api/screenshot?t="+Date.now();
+  }finally{
+    loading=false;
   }
 }
 
